@@ -163,7 +163,7 @@
     container.replaceChildren(el('div', { class: 'empty', text: 'Cargando…' }));
     await App.guard(async () => {
       const rows = await App.get('rfq_proveedor', 'select=*,proveedores(nombre),cotizaciones(id,nombre,empresa,tension)&order=created_at.desc');
-      const total = rows.filter((r) => ['aceptada', 'ordenada', 'entregada'].includes(r.estado)).reduce((s, r) => s + Number(r.precio_total || 0), 0);
+      const total = rows.filter((r) => ['aceptada', 'ordenada', 'entregada'].includes(r.estado)).reduce((s, r) => s + Number(r.precio_total || 0) * Number(r.tipo_cambio || 1), 0);
       const board = App.board({
         stages: App.OFERTA_ETAPAS, items: rows, getStage: (r) => r.estado,
         cardFn: (r) => el('div', { class: 'card', onclick: () => App.openSolicitud(r.cotizacion_id, 'proveedores') },
@@ -179,7 +179,7 @@
       container.replaceChildren(
         el('div', { class: 'stats' }, el('div', { class: 'stat' }, el('b', { text: rows.length }), el('span', { text: 'Ofertas / RFQ' })),
           el('div', { class: 'stat' }, el('b', { text: rows.filter((r) => r.estado === 'enviada').length }), el('span', { text: 'Esperando respuesta' })),
-          el('div', { class: 'stat' }, el('b', { text: App.money(total) }), el('span', { text: 'Comprometido (aceptadas en adelante)' }))),
+          el('div', { class: 'stat' }, el('b', { text: App.money(total) }), el('span', { text: 'Comprometido en USD (aceptadas en adelante)' }))),
         el('p', { class: 'sub', text: 'Arrastra las tarjetas entre columnas para cambiar la etapa. Haz clic para abrir la solicitud.' }), rows.length ? board : el('div', { class: 'empty', text: 'Aún no has enviado solicitudes de cotización a proveedores.' }));
     });
   }

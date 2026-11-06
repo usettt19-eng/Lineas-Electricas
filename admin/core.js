@@ -41,7 +41,9 @@
   App.MOV_TIPOS = [['cobro', 'Cobro de cliente'], ['pago_proveedor', 'Pago a proveedor'], ['pago_transportista', 'Pago a transportista'], ['gasto', 'Gasto'], ['ajuste', 'Ajuste']];
   App.METODOS = [['transferencia', 'Transferencia'], ['ach', 'ACH'], ['efectivo', 'Efectivo'], ['cheque', 'Cheque'], ['tarjeta', 'Tarjeta'], ['otro', 'Otro']];
   App.ORIGENES = [['web', 'Página web'], ['whatsapp', 'WhatsApp'], ['telefono', 'Teléfono'], ['correo', 'Correo'], ['presencial', 'Presencial'], ['otro', 'Otro']];
-  App.DOC_TIPOS = [['hoja_datos', 'Hoja de datos'], ['plano', 'Plano'], ['computo', 'Cómputo métrico'], ['especificacion', 'Especificaciones'], ['oferta', 'Oferta / cotización'], ['factura', 'Factura'], ['comprobante', 'Comprobante'], ['otro', 'Otro']];
+  App.DOC_TIPOS = [['hoja_datos', 'Hoja de datos'], ['plano', 'Plano'], ['computo', 'Cómputo métrico'], ['especificacion', 'Especificaciones'], ['oferta', 'Oferta / cotización'], ['orden_compra', 'Orden de compra del cliente'],
+    ['factura', 'Factura (proveedor / cliente)'], ['bl', 'Conocimiento de embarque / guía aérea'], ['dua', 'DUA de exportación'], ['comprobante', 'Comprobante de pago'], ['otro', 'Otro']];
+  App.ORIGENES_MERC = [['exterior', 'Exterior (se importa)'], ['panama', 'Panamá (proveedor local)'], ['zona_libre', 'Zona Libre de Colón']];
   App.DOC_DE = [['cliente', 'Del cliente'], ['proveedor', 'Del proveedor'], ['transportista', 'Del transportista'], ['interno', 'Interno']];
   App.label = (list, key) => (list.find((x) => x[0] === key) || [key, key || '—'])[1];
 

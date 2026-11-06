@@ -44,7 +44,7 @@
         await App.loadDirs();
         const [movs, proformas, cots, rfqs, fletes] = await Promise.all([
           App.get('movimientos', 'select=*&order=fecha.desc,created_at.desc&limit=2000'), App.get('proformas', 'select=id,cotizacion_id,estado,total,numero,moneda'),
-          App.get('cotizaciones', 'select=id,cliente_id'), App.get('rfq_proveedor', 'select=proveedor_id,estado,precio_total,moneda'),
+          App.get('cotizaciones', 'select=id,cliente_id'), App.get('rfq_proveedor', 'select=proveedor_id,estado,precio_total,moneda,tipo_cambio,itbms_pct'),
           App.get('cotizaciones_flete', 'select=transportista_id,estado,flete_usd,seguro_usd,gastos_origen_usd,gastos_destino_usd')
         ]);
         const cliOf = Object.fromEntries(cots.map((c) => [c.id, c.cliente_id]));
@@ -56,7 +56,7 @@
         }).filter((x) => x.fact || x.cob);
         const sinCliente = aceptadas.filter((p) => !cliOf[p.cotizacion_id]).length;
         const cxpProv = App.cache.proveedores.map((p) => {
-          const comp = sumBy(rfqs.filter((x) => x.proveedor_id === p.id && OK_RFQ.includes(x.estado) && ['USD', 'PAB'].includes(x.moneda)), (x) => Number(x.precio_total || 0));
+          const comp = sumBy(rfqs.filter((x) => x.proveedor_id === p.id && OK_RFQ.includes(x.estado)), (x) => Number(x.precio_total || 0) * Number(x.tipo_cambio || 1) * (1 + Number(x.itbms_pct || 0) / 100));
           const pag = sumBy(movs.filter((m) => m.tipo === 'pago_proveedor' && m.proveedor_id === p.id), (m) => Number(m.monto));
           return { n: p.nombre, comp, pag, saldo: App.r2(comp - pag) };
         }).filter((x) => x.comp || x.pag);
@@ -91,7 +91,7 @@
             body.replaceChildren(sinCliente ? el('div', { class: 'box' }, el('b', { text: `⚠ ${sinCliente} proforma(s) aceptada(s) pertenecen a solicitudes sin cliente vinculado y no aparecen aquí. Vincúlalas desde la pestaña Resumen de cada solicitud.` })) : null,
               simpleTable('Cuentas por cobrar (proformas aceptadas − cobros)', cxc.map((x) => ({ n: x.c.nombre, a: x.fact, b: x.cob, saldo: x.saldo, id: x.c.id })), ['Cliente', 'Facturado', 'Cobrado', 'Saldo'], (r) => App.openCliente(r.id)));
           } else if (tab === 'cxp') {
-            body.replaceChildren(el('p', { class: 'sub', text: 'Comprometido = ofertas aceptadas / con orden / entregadas (proveedores) y fletes contratados (transportistas), en USD/PAB.' }),
+            body.replaceChildren(el('p', { class: 'sub', text: 'Comprometido = ofertas aceptadas / con orden / entregadas (en USD con su tipo de cambio, más el ITBMS de proveedores locales) y fletes contratados (transportistas).' }),
               simpleTable('Proveedores', cxpProv.map((x) => ({ n: x.n, a: x.comp, b: x.pag, saldo: x.saldo })), ['Proveedor', 'Comprometido', 'Pagado', 'Saldo']),
               simpleTable('Transportistas', cxpTr.map((x) => ({ n: x.n, a: x.comp, b: x.pag, saldo: x.saldo })), ['Transportista', 'Comprometido', 'Pagado', 'Saldo']));
           } else drawMov();
