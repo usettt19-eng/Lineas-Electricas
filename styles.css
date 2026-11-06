@@ -1901,3 +1901,30 @@ textarea {
 .quote-bar strong { color: #ffb74d; white-space: nowrap; }
 @keyframes quoteBarIn { from { transform: translateY(12px); opacity: 0; } to { transform: none; opacity: 1; } }
 @media (max-width: 480px) { .quote-bar .qb-text { display: none; } }
+
+/* Productos "Próximamente disponible" */
+.product-card.is-soon { background: #f8fafc; border-style: dashed; }
+.product-card.is-soon .pc-icon,
+.product-card.is-soon .pc-title,
+.product-card.is-soon .pc-text { opacity: 0.72; }
+.pc-soon {
+  display: inline-block;
+  margin-bottom: 0.45rem;
+  padding: 0.18rem 0.65rem;
+  border-radius: 999px;
+  border: 1px solid #fdba74;
+  background: #fff3e0;
+  color: #b45309;
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+.pc-quote-btn:disabled,
+.pc-quote-btn:disabled:hover {
+  background: transparent;
+  border-color: #cbd5e1;
+  color: #64748b;
+  cursor: not-allowed;
+  opacity: 0.65;
+}
