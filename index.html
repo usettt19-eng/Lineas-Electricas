@@ -96,10 +96,6 @@
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>
           <span>WhatsApp: +507 4320507</span>
         </a>
-        <button type="button" class="btn-config-brand" id="openBrandConfigBtn" title="Configurar nombre de empresa, teléfono, correo y WhatsApp">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
-          Personalizar Marca
-        </button>
       </div>
     </div>
   </div>
@@ -1389,52 +1385,6 @@
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>
         </button>
       </div>
-    </div>
-  </div>
-
-  <!-- MODAL PARA PERSONALIZAR DATOS DE LA EMPRESA (LOGO / NOMBRE / TELÉFONO / WHATSAPP / CORREO) -->
-  <div class="modal-backdrop" id="brandConfigModal" role="dialog" aria-modal="true" aria-labelledby="brandModalTitle" hidden>
-    <div class="modal-dialog modal-sm">
-      <div class="modal-header">
-        <div>
-          <span class="modal-eyebrow">CONFIGURACIÓN DE IDENTIDAD</span>
-          <h3 class="modal-title" id="brandModalTitle">Datos reales de la empresa</h3>
-        </div>
-        <button type="button" class="modal-close" id="closeBrandModalBtn" aria-label="Cerrar configuración">✕</button>
-      </div>
-      <form id="brandConfigForm" class="modal-body tech-form">
-        <p class="modal-helper-text">
-          Actualice el nombre de la empresa, contacto, teléfono, WhatsApp, correo y dirección. Los cambios se aplicarán inmediatamente en toda la página.
-        </p>
-        <div class="form-group">
-          <label for="cfgBrandName">Nombre de la empresa</label>
-          <input type="text" id="cfgBrandName" value="Use Union de Servicios Especializados" required />
-        </div>
-        <div class="form-group">
-          <label for="cfgBrandContact">Persona de contacto</label>
-          <input type="text" id="cfgBrandContact" value="Ing. Ruben Suarez" required />
-        </div>
-        <div class="form-group">
-          <label for="cfgBrandPhone">Teléfono visible</label>
-          <input type="text" id="cfgBrandPhone" value="+507 432-0507" required />
-        </div>
-        <div class="form-group">
-          <label for="cfgBrandWhatsapp">Número de WhatsApp (solo dígitos con código de país)</label>
-          <input type="text" id="cfgBrandWhatsapp" value="5074320507" required />
-        </div>
-        <div class="form-group">
-          <label for="cfgBrandEmail">Correo electrónico de cotizaciones</label>
-          <input type="email" id="cfgBrandEmail" value="info@useservices.company" required />
-        </div>
-        <div class="form-group">
-          <label for="cfgBrandAddress">Dirección física</label>
-          <input type="text" id="cfgBrandAddress" value="Av. Aquilino de la Guardia - PH Ocean Business - Piso 19, Bella Vista, Panamá" required />
-        </div>
-        <div class="modal-footer-inline">
-          <button type="button" class="btn btn-outline-light" id="resetBrandConfigBtn">Restaurar valores base</button>
-          <button type="submit" class="btn btn-amber">Aplicar datos en la página</button>
-        </div>
-      </form>
     </div>
   </div>
 

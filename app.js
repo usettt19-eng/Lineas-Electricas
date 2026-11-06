@@ -341,7 +341,6 @@ document.addEventListener('DOMContentLoaded', () => {
   // Cerrar modales al hacer clic fuera del cuadro de diálogo
   window.addEventListener('click', (e) => {
     if (e.target === specModal) closeVoltageModal();
-    if (e.target === brandConfigModal) brandConfigModal.hidden = true;
   });
 
   // 7. Gestión visual de archivos adjuntos (Dropzones en Sección 6 y Sección 10)
@@ -680,21 +679,20 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
-  // 10. Personalizador en vivo de Datos de Empresa (Nombre, Teléfono, WhatsApp, Correo, Dirección)
-  const openBrandConfigBtn = document.getElementById('openBrandConfigBtn');
-  const brandConfigModal = document.getElementById('brandConfigModal');
-  const closeBrandModalBtn = document.getElementById('closeBrandModalBtn');
-  const brandConfigForm = document.getElementById('brandConfigForm');
-  const resetBrandConfigBtn = document.getElementById('resetBrandConfigBtn');
+  // 10. Datos de empresa: se administran desde /admin y se leen de Supabase (tabla `config_marca`)
+  const BRAND_CACHE_KEY = 'use_brand_cache_v3';
+  let brandConfig = { ...DEFAULT_BRAND_CONFIG };
+
+  function sanitizeBrand(raw) {
+    const out = { ...DEFAULT_BRAND_CONFIG };
+    Object.keys(DEFAULT_BRAND_CONFIG).forEach((k) => {
+      if (raw && typeof raw[k] === 'string' && raw[k].trim()) out[k] = raw[k].trim();
+    });
+    return out;
+  }
 
   function getSavedBrandConfig() {
-    try {
-      const raw = localStorage.getItem('use_panama_brand_config_v2');
-      if (raw) return { ...DEFAULT_BRAND_CONFIG, ...JSON.parse(raw) };
-    } catch (_) {
-      // Fallback
-    }
-    return { ...DEFAULT_BRAND_CONFIG };
+    return brandConfig;
   }
 
   function applyBrandConfig(cfg) {
@@ -731,58 +729,26 @@ document.addEventListener('DOMContentLoaded', () => {
     document.title = `${cfg.name} | Proveedor de Materiales para Líneas Eléctricas 13.8 kV, 34.5 kV, 115 kV y 230 kV`;
   }
 
-  // Cargar configuración guardada al iniciar
-  const currentBrand = getSavedBrandConfig();
-  applyBrandConfig(currentBrand);
+  // Valores por defecto al instante (o la última versión guardada en caché) y luego los datos vigentes de Supabase
+  try {
+    const cached = JSON.parse(localStorage.getItem(BRAND_CACHE_KEY) || 'null');
+    if (cached) brandConfig = sanitizeBrand(cached);
+  } catch (_) {}
+  applyBrandConfig(brandConfig);
 
-  if (openBrandConfigBtn && brandConfigModal) {
-    openBrandConfigBtn.addEventListener('click', () => {
-      const cfg = getSavedBrandConfig();
-      document.getElementById('cfgBrandName').value = cfg.name;
-      const contactInput = document.getElementById('cfgBrandContact');
-      if (contactInput) contactInput.value = cfg.contact || DEFAULT_BRAND_CONFIG.contact;
-      document.getElementById('cfgBrandPhone').value = cfg.phone;
-      document.getElementById('cfgBrandWhatsapp').value = cfg.whatsapp;
-      document.getElementById('cfgBrandEmail').value = cfg.email;
-      document.getElementById('cfgBrandAddress').value = cfg.address;
-      brandConfigModal.hidden = false;
-    });
-  }
-
-  if (closeBrandModalBtn && brandConfigModal) {
-    closeBrandModalBtn.addEventListener('click', () => {
-      brandConfigModal.hidden = true;
-    });
-  }
-
-  if (brandConfigForm) {
-    brandConfigForm.addEventListener('submit', (e) => {
-      e.preventDefault();
-      const contactInput = document.getElementById('cfgBrandContact');
-      const newCfg = {
-        name: document.getElementById('cfgBrandName').value.trim() || DEFAULT_BRAND_CONFIG.name,
-        contact:
-          (contactInput && contactInput.value.trim()) || DEFAULT_BRAND_CONFIG.contact,
-        phone: document.getElementById('cfgBrandPhone').value.trim() || DEFAULT_BRAND_CONFIG.phone,
-        whatsapp: document.getElementById('cfgBrandWhatsapp').value.trim() || DEFAULT_BRAND_CONFIG.whatsapp,
-        email: document.getElementById('cfgBrandEmail').value.trim() || DEFAULT_BRAND_CONFIG.email,
-        address: document.getElementById('cfgBrandAddress').value.trim() || DEFAULT_BRAND_CONFIG.address
-      };
+  fetch(`${SUPABASE_URL}/rest/v1/config_marca?id=eq.1&select=name,contact,phone,whatsapp,email,address`, {
+    headers: { apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${SUPABASE_ANON_KEY}` }
+  })
+    .then((res) => (res.ok ? res.json() : []))
+    .then((rows) => {
+      if (!rows || !rows[0]) return;
+      brandConfig = sanitizeBrand(rows[0]);
       try {
-        localStorage.setItem('use_panama_brand_config_v2', JSON.stringify(newCfg));
+        localStorage.setItem(BRAND_CACHE_KEY, JSON.stringify(brandConfig));
       } catch (_) {}
-      applyBrandConfig(newCfg);
-      brandConfigModal.hidden = true;
+      applyBrandConfig(brandConfig);
+    })
+    .catch(() => {
+      // Sin conexión con Supabase: se mantienen los valores por defecto / caché
     });
-  }
-
-  if (resetBrandConfigBtn) {
-    resetBrandConfigBtn.addEventListener('click', () => {
-      try {
-        localStorage.removeItem('use_panama_brand_config_v2');
-      } catch (_) {}
-      applyBrandConfig(DEFAULT_BRAND_CONFIG);
-      brandConfigModal.hidden = true;
-    });
-  }
 });

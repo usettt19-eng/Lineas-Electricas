@@ -62,6 +62,12 @@
     dt { color: var(--muted); } dd { margin: 0; word-break: break-word; white-space: pre-wrap; }
     .row-actions { display: flex; flex-wrap: wrap; gap: .5rem; margin: .75rem 0 1rem; }
     .files a { display: block; margin: .25rem 0; color: var(--blue); }
+    .tabs { display: flex; gap: .5rem; margin-bottom: 1rem; }
+    .tab { background: transparent; border: 1px solid var(--line); border-radius: 8px; padding: .5rem 1rem; cursor: pointer; font-weight: 600; color: var(--muted); }
+    .tab.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+    .brand-card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 1.25rem; max-width: 640px; }
+    .brand-card h2 { margin: 0 0 .25rem; font-size: 1.15rem; } .brand-card p { margin: 0 0 1rem; color: var(--muted); font-size: .9rem; }
+    .hint { color: var(--muted); font-size: .8rem; margin-top: .25rem; }
     .toast { position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%); background: var(--text); color: var(--bg); padding: .6rem 1rem; border-radius: 8px; z-index: 20; }
   </style>
 </head>
@@ -84,6 +90,25 @@
     <div><span class="who" id="who"></span><button class="btn ghost small" id="reload">Actualizar</button> <button class="btn ghost small" id="logout">Salir</button></div>
   </header>
   <main>
+    <div class="tabs">
+      <button class="tab active" id="tabReq" type="button">Solicitudes</button>
+      <button class="tab" id="tabBrand" type="button">Datos de empresa</button>
+    </div>
+    <div id="brandView" hidden>
+      <form class="brand-card" id="brandForm">
+        <h2>Datos de la empresa</h2>
+        <p>Estos datos se muestran en toda la página pública (teléfono, correo, dirección y botones de WhatsApp). Los cambios se ven al recargar la página.</p>
+        <div class="field"><label for="bName">Nombre de la empresa</label><input id="bName" maxlength="160" required /></div>
+        <div class="field"><label for="bContact">Persona de contacto</label><input id="bContact" maxlength="120" required /></div>
+        <div class="field"><label for="bPhone">Teléfono visible</label><input id="bPhone" maxlength="40" required /></div>
+        <div class="field"><label for="bWa">Número de WhatsApp</label><input id="bWa" inputmode="numeric" maxlength="20" required /><div class="hint">Solo dígitos con código de país, por ejemplo 5074320507.</div></div>
+        <div class="field"><label for="bEmail">Correo de cotizaciones</label><input id="bEmail" type="email" maxlength="160" required /></div>
+        <div class="field"><label for="bAddress">Dirección física</label><input id="bAddress" maxlength="300" required /></div>
+        <button class="btn" type="submit">Guardar cambios</button>
+        <div class="msg-err" id="brandErr" hidden></div>
+      </form>
+    </div>
+    <div id="reqView">
     <div class="stats" id="stats"></div>
     <div class="filters">
       <input id="q" type="search" placeholder="Buscar por nombre, empresa, correo, teléfono…" />
@@ -97,6 +122,7 @@
         <tbody id="rows"></tbody>
       </table>
       <div class="empty" id="empty" hidden>No hay solicitudes con ese filtro.</div>
+    </div>
     </div>
   </main>
 </section>
@@ -267,6 +293,36 @@
     const a = el('a', { href: URL.createObjectURL(new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8' })), download: 'solicitudes.csv' });
     a.click(); URL.revokeObjectURL(a.href);
   }
+
+  // ---------- datos de empresa ----------
+  function showTab(which) {
+    const brand = which === 'brand';
+    $('brandView').hidden = !brand; $('reqView').hidden = brand;
+    $('tabBrand').classList.toggle('active', brand); $('tabReq').classList.toggle('active', !brand);
+    if (brand) loadBrand();
+  }
+  async function loadBrand() {
+    $('brandErr').hidden = true;
+    try {
+      const rows = await api('/rest/v1/config_marca?id=eq.1&select=*');
+      const c = rows && rows[0]; if (!c) return;
+      $('bName').value = c.name; $('bContact').value = c.contact; $('bPhone').value = c.phone;
+      $('bWa').value = c.whatsapp; $('bEmail').value = c.email; $('bAddress').value = c.address;
+    } catch (_) { toast('No se pudieron cargar los datos de la empresa'); }
+  }
+  $('brandForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const wa = $('bWa').value.replace(/\D/g, '');
+    if (!/^[0-9]{8,15}$/.test(wa)) { $('brandErr').textContent = 'El WhatsApp debe tener entre 8 y 15 dígitos (con código de país).'; $('brandErr').hidden = false; return; }
+    const body = { name: $('bName').value.trim(), contact: $('bContact').value.trim(), phone: $('bPhone').value.trim(), whatsapp: wa, email: $('bEmail').value.trim(), address: $('bAddress').value.trim() };
+    try {
+      const out = await api('/rest/v1/config_marca?id=eq.1', { method: 'PATCH', headers: { Prefer: 'return=representation' }, body: JSON.stringify(body) });
+      if (!out || !out.length) throw new Error('sin permiso');
+      $('bWa').value = wa; $('brandErr').hidden = true; toast('Datos guardados. Ya se ven en la página pública.');
+    } catch (_) { $('brandErr').textContent = 'No se pudo guardar. Revisa los datos e intenta de nuevo.'; $('brandErr').hidden = false; }
+  });
+  $('tabReq').addEventListener('click', () => showTab('req'));
+  $('tabBrand').addEventListener('click', () => showTab('brand'));
 
   // ---------- eventos ----------
   $('loginForm').addEventListener('submit', async (e) => {
