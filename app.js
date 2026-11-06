@@ -193,7 +193,23 @@ document.addEventListener('DOMContentLoaded', () => {
   const selectedList = document.getElementById('selectedProductsList');
   const contactDescription = document.getElementById('contactDescription');
 
+  // Barra flotante: avisa cuántos productos lleva el cliente y lo lleva al formulario
+  let quoteBar = null;
+  function updateQuoteBar() {
+    if (!quoteBar) {
+      quoteBar = document.createElement('a');
+      quoteBar.className = 'quote-bar';
+      quoteBar.href = '#cotizacion';
+      quoteBar.setAttribute('aria-live', 'polite');
+      document.body.appendChild(quoteBar);
+    }
+    const n = selectedProducts.size;
+    quoteBar.hidden = n === 0;
+    quoteBar.innerHTML = `<span class="qb-count">${n}</span><span class="qb-text">${n === 1 ? 'producto' : 'productos'} en su cotización</span><strong>Ir a cotizar →</strong>`;
+  }
+
   function renderSelectedProducts() {
+    updateQuoteBar();
     if (!selectedContainer || !selectedList) return;
     selectedList.innerHTML = '';
     if (selectedProducts.size === 0) {
@@ -646,7 +662,8 @@ document.addEventListener('DOMContentLoaded', () => {
           tension: data.voltage,
           requerimiento: data.reqType,
           cambio_direccion: data.direction,
-          descripcion: data.desc
+          descripcion: data.desc,
+          partidas: selectedProducts.size > 0 ? Array.from(selectedProducts).join(', ') : null
         },
         contactFilesInput && contactFilesInput.files,
         'contactWebsite'

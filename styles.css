@@ -1868,3 +1868,36 @@ textarea {
     text-align: center;
   }
 }
+
+/* Barra flotante "productos en su cotización" */
+.quote-bar {
+  position: fixed;
+  left: 16px;
+  bottom: 16px;
+  z-index: 900;
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  max-width: calc(100% - 104px);
+  padding: 0.6rem 1rem;
+  border-radius: 999px;
+  background: #0b1324;
+  color: #fff;
+  font-size: 0.9rem;
+  text-decoration: none;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+  animation: quoteBarIn 0.25s ease;
+}
+.quote-bar[hidden] { display: none; }
+.quote-bar .qb-count {
+  display: grid;
+  place-items: center;
+  min-width: 1.7rem;
+  height: 1.7rem;
+  border-radius: 999px;
+  background: #f57c00;
+  font-weight: 700;
+}
+.quote-bar strong { color: #ffb74d; white-space: nowrap; }
+@keyframes quoteBarIn { from { transform: translateY(12px); opacity: 0; } to { transform: none; opacity: 1; } }
+@media (max-width: 480px) { .quote-bar .qb-text { display: none; } }
