@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="robots" content="noindex, nofollow" />
+  <title>Panel de Solicitudes</title>
+  <style>
+    :root {
+      --bg: #f3f5f9; --card: #ffffff; --text: #14213d; --muted: #5b6785; --line: #e1e6f0;
+      --accent: #f57c00; --accent-dark: #d96a00; --ok: #16a34a; --err: #dc2626; --blue: #2563eb;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root { --bg: #0e1424; --card: #172036; --text: #e8edf8; --muted: #9aa7c7; --line: #26324f; }
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; background: var(--bg); color: var(--text); }
+    [hidden] { display: none !important; }
+    button, input, select, textarea { font: inherit; color: inherit; }
+    input, select, textarea { background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: .6rem .75rem; width: 100%; }
+    textarea { resize: vertical; min-height: 90px; }
+    .btn { border: 0; border-radius: 8px; padding: .6rem 1rem; cursor: pointer; font-weight: 600; background: var(--accent); color: #fff; text-decoration: none; display: inline-block; }
+    .btn:hover { background: var(--accent-dark); }
+    .btn.ghost { background: transparent; color: var(--text); border: 1px solid var(--line); }
+    .btn.wa { background: #1fa855; } .btn.mail { background: var(--blue); } .btn.small { padding: .4rem .7rem; font-size: .85rem; }
+
+    /* Login */
+    #login { min-height: 100vh; display: grid; place-items: center; padding: 16px; }
+    .login-card { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 2rem; width: 100%; max-width: 380px; }
+    .login-card h1 { margin: 0 0 .25rem; font-size: 1.4rem; }
+    .login-card p { margin: 0 0 1.25rem; color: var(--muted); font-size: .9rem; }
+    .field { margin-bottom: .9rem; } .field label { display: block; font-size: .85rem; margin-bottom: .3rem; color: var(--muted); }
+    .msg-err { color: var(--err); font-size: .9rem; margin-top: .75rem; }
+
+    /* App */
+    header.top { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: .9rem 16px; background: var(--card); border-bottom: 1px solid var(--line); position: sticky; top: 0; z-index: 5; }
+    header.top h1 { margin: 0; font-size: 1.1rem; }
+    header.top .who { color: var(--muted); font-size: .85rem; margin-right: .75rem; }
+    main { max-width: 1200px; margin: 0 auto; padding: 16px; }
+    .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: .75rem; margin-bottom: 1rem; }
+    .stat { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: .75rem 1rem; cursor: pointer; text-align: left; }
+    .stat.active { border-color: var(--accent); }
+    .stat b { display: block; font-size: 1.5rem; } .stat span { color: var(--muted); font-size: .8rem; }
+    .filters { display: grid; grid-template-columns: 2fr 1fr 1fr auto; gap: .6rem; margin-bottom: 1rem; }
+    @media (max-width: 700px) { .filters { grid-template-columns: 1fr 1fr; } .filters input { grid-column: 1 / -1; } }
+    .table-wrap { background: var(--card); border: 1px solid var(--line); border-radius: 12px; overflow-x: auto; }
+    table { width: 100%; border-collapse: collapse; min-width: 640px; }
+    th, td { text-align: left; padding: .7rem .9rem; border-bottom: 1px solid var(--line); font-size: .9rem; }
+    th { color: var(--muted); font-weight: 600; font-size: .8rem; text-transform: uppercase; letter-spacing: .03em; }
+    tbody tr { cursor: pointer; } tbody tr:hover { background: color-mix(in srgb, var(--accent) 8%, transparent); }
+    .badge { display: inline-block; padding: .15rem .55rem; border-radius: 999px; font-size: .75rem; font-weight: 700; background: var(--line); }
+    .badge.nueva { background: #fde68a; color: #7c4a03; } .badge.contactada { background: #bfdbfe; color: #1e3a8a; }
+    .badge.cotizada { background: #ddd6fe; color: #4c1d95; } .badge.cerrada { background: #bbf7d0; color: #14532d; }
+    .badge.descartada { background: #e5e7eb; color: #374151; }
+    .empty { padding: 2rem; text-align: center; color: var(--muted); }
+
+    /* Detalle */
+    .overlay { position: fixed; inset: 0; background: rgba(0,0,0,.5); display: flex; justify-content: flex-end; z-index: 10; }
+    .panel { background: var(--card); width: 100%; max-width: 520px; height: 100%; overflow-y: auto; padding: 1.25rem; }
+    .panel h2 { margin: 0 0 .25rem; font-size: 1.2rem; } .panel .sub { color: var(--muted); font-size: .85rem; margin-bottom: 1rem; }
+    dl { display: grid; grid-template-columns: 140px 1fr; gap: .45rem .75rem; margin: 0 0 1rem; font-size: .9rem; }
+    dt { color: var(--muted); } dd { margin: 0; word-break: break-word; white-space: pre-wrap; }
+    .row-actions { display: flex; flex-wrap: wrap; gap: .5rem; margin: .75rem 0 1rem; }
+    .files a { display: block; margin: .25rem 0; color: var(--blue); }
+    .toast { position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%); background: var(--text); color: var(--bg); padding: .6rem 1rem; border-radius: 8px; z-index: 20; }
+  </style>
+</head>
+<body>
+
+<section id="login" hidden>
+  <form class="login-card" id="loginForm">
+    <h1>Panel de Solicitudes</h1>
+    <p>Acceso solo para personal autorizado.</p>
+    <div class="field"><label for="email">Correo</label><input id="email" type="email" autocomplete="username" required /></div>
+    <div class="field"><label for="password">Contraseña</label><input id="password" type="password" autocomplete="current-password" required /></div>
+    <button class="btn" type="submit" style="width:100%">Entrar</button>
+    <div class="msg-err" id="loginErr" hidden></div>
+  </form>
+</section>
+
+<section id="app" hidden>
+  <header class="top">
+    <h1>Solicitudes de cotización</h1>
+    <div><span class="who" id="who"></span><button class="btn ghost small" id="reload">Actualizar</button> <button class="btn ghost small" id="logout">Salir</button></div>
+  </header>
+  <main>
+    <div class="stats" id="stats"></div>
+    <div class="filters">
+      <input id="q" type="search" placeholder="Buscar por nombre, empresa, correo, teléfono…" />
+      <select id="fEstado"><option value="">Todos los estados</option></select>
+      <select id="fTipo"><option value="">Todos los tipos</option><option value="tecnica">Técnica</option><option value="contacto">Contacto</option></select>
+      <button class="btn ghost" id="exportCsv">Exportar CSV</button>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Fecha</th><th>Cliente</th><th>Tipo</th><th>Tensión</th><th>Archivos</th><th>Estado</th></tr></thead>
+        <tbody id="rows"></tbody>
+      </table>
+      <div class="empty" id="empty" hidden>No hay solicitudes con ese filtro.</div>
+    </div>
+  </main>
+</section>
+
+<div class="overlay" id="overlay" hidden><div class="panel" id="panel"></div></div>
+<div class="toast" id="toast" hidden></div>
+
+<script>
+(() => {
+  'use strict';
+  const SUPABASE_URL = 'https://atsvcwvfapfzabrywjwx.supabase.co';
+  const ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImF0c3Zjd3ZmYXBmemFicnl3and4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTM5MTUyODEsImV4cCI6MjEwOTQ5MTI4MX0.jET54CTvKQcpAdpOrHL-n0j-eAoiwvDNlIjXO-Hmrdc';
+  const ESTADOS = ['nueva', 'contactada', 'cotizada', 'cerrada', 'descartada'];
+  const SESSION_KEY = 'use_admin_session_v1';
+  const $ = (id) => document.getElementById(id);
+
+  let session = null;   // { access_token, refresh_token, expires_at, user }
+  let all = [];         // todas las solicitudes cargadas
+  let current = null;   // solicitud abierta en el panel
+
+  // ---------- utilidades ----------
+  function el(tag, props, ...kids) {
+    const n = document.createElement(tag);
+    Object.entries(props || {}).forEach(([k, v]) => {
+      if (k === 'class') n.className = v; else if (k === 'text') n.textContent = v;
+      else if (k.startsWith('on')) n.addEventListener(k.slice(2), v); else n.setAttribute(k, v);
+    });
+    kids.flat().forEach((c) => n.append(c));
+    return n;
+  }
+  function toast(msg) { const t = $('toast'); t.textContent = msg; t.hidden = false; setTimeout(() => (t.hidden = true), 2600); }
+  function fmtDate(iso) { return new Date(iso).toLocaleString('es-PA', { dateStyle: 'short', timeStyle: 'short' }); }
+  function cliente(r) { return r.nombre + (r.empresa ? ' · ' + r.empresa : ''); }
+  function telDigits(s) { return (s || '').replace(/[^\d]/g, ''); }
+  function saveSession() { try { session ? localStorage.setItem(SESSION_KEY, JSON.stringify(session)) : localStorage.removeItem(SESSION_KEY); } catch (_) {} }
+  function loadSession() { try { return JSON.parse(localStorage.getItem(SESSION_KEY) || 'null'); } catch (_) { return null; } }
+
+  // ---------- API ----------
+  async function authRequest(path, body) {
+    const res = await fetch(`${SUPABASE_URL}/auth/v1/${path}`, {
+      method: 'POST', headers: { apikey: ANON_KEY, 'Content-Type': 'application/json' }, body: JSON.stringify(body)
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.msg || data.error_description || 'Error de autenticación');
+    return { access_token: data.access_token, refresh_token: data.refresh_token, expires_at: data.expires_at, user: data.user };
+  }
+  async function ensureFreshToken() {
+    if (!session) return;
+    if (session.expires_at - 60 > Date.now() / 1000) return;
+    session = await authRequest('token?grant_type=refresh_token', { refresh_token: session.refresh_token });
+    saveSession();
+  }
+  async function api(path, opts = {}) {
+    await ensureFreshToken();
+    const res = await fetch(`${SUPABASE_URL}${path}`, {
+      ...opts,
+      headers: { apikey: ANON_KEY, Authorization: `Bearer ${session.access_token}`, 'Content-Type': 'application/json', ...(opts.headers || {}) }
+    });
+    if (res.status === 401) throw new Error('SESION');
+    if (!res.ok) throw new Error((await res.text()) || res.statusText);
+    return res.status === 204 ? null : res.json().catch(() => null);
+  }
+
+  // ---------- vistas ----------
+  function showLogin(err) {
+    $('app').hidden = true; $('login').hidden = false;
+    $('loginErr').hidden = !err; $('loginErr').textContent = err || '';
+  }
+  async function showApp() {
+    // Verificar que el correo está autorizado (lista public.admins)
+    let isAdmin = false;
+    try { isAdmin = (await api('/rest/v1/rpc/is_admin', { method: 'POST', body: '{}' })) === true; } catch (e) { if (e.message === 'SESION') { session = null; saveSession(); return showLogin('La sesión expiró. Entra de nuevo.'); } }
+    if (!isAdmin) { session = null; saveSession(); return showLogin('Esta cuenta no está autorizada para ver el panel.'); }
+    $('login').hidden = true; $('app').hidden = false;
+    $('who').textContent = session.user.email;
+    await load();
+  }
+  async function load() {
+    try {
+      all = await api('/rest/v1/cotizaciones?select=*&order=created_at.desc&limit=1000');
+      render();
+    } catch (e) {
+      if (e.message === 'SESION') { session = null; saveSession(); showLogin('La sesión expiró. Entra de nuevo.'); }
+      else toast('No se pudieron cargar las solicitudes');
+    }
+  }
+
+  function filtered() {
+    const q = $('q').value.trim().toLowerCase(), fe = $('fEstado').value, ft = $('fTipo').value;
+    return all.filter((r) => (!fe || r.estado === fe) && (!ft || r.tipo === ft) &&
+      (!q || [r.nombre, r.empresa, r.correo, r.telefono, r.contacto_info, r.descripcion, r.partidas].some((v) => (v || '').toLowerCase().includes(q))));
+  }
+  function render() {
+    // Contadores por estado
+    const counts = Object.fromEntries(ESTADOS.map((e) => [e, 0])); all.forEach((r) => counts[r.estado]++);
+    const stats = $('stats'); stats.replaceChildren(
+      el('button', { class: 'stat' + (!$('fEstado').value ? ' active' : ''), onclick: () => { $('fEstado').value = ''; render(); } }, el('b', { text: all.length }), el('span', { text: 'Todas' })),
+      ...ESTADOS.map((e) => el('button', { class: 'stat' + ($('fEstado').value === e ? ' active' : ''), onclick: () => { $('fEstado').value = e; render(); } }, el('b', { text: counts[e] }), el('span', { text: e[0].toUpperCase() + e.slice(1) + 's' }))));
+    const rows = filtered(), tb = $('rows');
+    tb.replaceChildren(...rows.map((r) => el('tr', { onclick: () => openDetail(r) },
+      el('td', { text: fmtDate(r.created_at) }), el('td', { text: cliente(r) }),
+      el('td', { text: r.tipo === 'tecnica' ? 'Técnica' : 'Contacto' }), el('td', { text: r.tension }),
+      el('td', { text: (r.archivos || []).length || '—' }),
+      el('td', {}, el('span', { class: 'badge ' + r.estado, text: r.estado })))));
+    $('empty').hidden = rows.length > 0;
+  }
+
+  function addRow(dl, label, value) { if (value) dl.append(el('dt', { text: label }), el('dd', { text: value })); }
+
+  async function openDetail(r) {
+    current = r;
+    const panel = $('panel'); panel.replaceChildren();
+    const dl = el('dl');
+    addRow(dl, 'Tipo', r.tipo === 'tecnica' ? 'Especificación técnica' : 'Contacto y cotización');
+    addRow(dl, 'Empresa', r.empresa); addRow(dl, 'Correo', r.correo); addRow(dl, 'Teléfono', r.telefono);
+    addRow(dl, 'Contacto', r.contacto_info); addRow(dl, 'Nivel de tensión', r.tension);
+    addRow(dl, 'Requerimiento', r.requerimiento); addRow(dl, 'Cambio dirección', r.cambio_direccion);
+    addRow(dl, 'Longitud', r.longitud); addRow(dl, 'Terreno', r.terreno); addRow(dl, 'Estructuras', r.cant_estructuras);
+    addRow(dl, 'Ángulo horizontal', r.angulo_horizontal); addRow(dl, 'Desnivel vertical', r.desnivel_vertical);
+    addRow(dl, 'Conductor', r.conductor); addRow(dl, 'Entrega estimada', r.fecha_entrega);
+    addRow(dl, 'Partidas', r.partidas); addRow(dl, 'Descripción', r.descripcion);
+
+    const actions = el('div', { class: 'row-actions' });
+    const phone = telDigits(r.telefono || r.contacto_info);
+    if (phone.length >= 7) actions.append(el('a', { class: 'btn wa small', target: '_blank', rel: 'noopener', href: `https://wa.me/${phone}?text=${encodeURIComponent('Hola ' + r.nombre + ', recibimos su solicitud de cotización de línea ' + r.tension + '. ')}`, text: 'WhatsApp' }));
+    const mail = r.correo || ((r.contacto_info || '').match(/[^\s/]+@[^\s/]+\.[^\s/]+/) || [])[0];
+    if (mail) actions.append(el('a', { class: 'btn mail small', href: `mailto:${mail}?subject=${encodeURIComponent('Su solicitud de cotización ' + r.tension)}`, text: 'Correo' }));
+    if (phone.length >= 7) actions.append(el('a', { class: 'btn ghost small', href: `tel:+${phone}`, text: 'Llamar' }));
+
+    const sel = el('select', { id: 'selEstado' }, ...ESTADOS.map((e) => el('option', { value: e, text: e })));
+    sel.value = r.estado;
+    const notas = el('textarea', { id: 'txtNotas', placeholder: 'Notas internas (no las ve el cliente)' }); notas.value = r.notas || '';
+    const files = el('div', { class: 'files' });
+
+    panel.append(
+      el('h2', { text: r.nombre }), el('div', { class: 'sub', text: fmtDate(r.created_at) }),
+      actions, dl,
+      el('div', { class: 'field' }, el('label', { for: 'selEstado', text: 'Estado' }), sel),
+      el('div', { class: 'field' }, el('label', { for: 'txtNotas', text: 'Notas' }), notas),
+      el('div', { class: 'row-actions' },
+        el('button', { class: 'btn', onclick: saveDetail, text: 'Guardar' }),
+        el('button', { class: 'btn ghost', onclick: closeDetail, text: 'Cerrar' })),
+      (r.archivos || []).length ? el('h3', { text: 'Archivos adjuntos' }) : '', files);
+    $('overlay').hidden = false;
+
+    // Enlaces firmados (10 min) para archivos privados
+    for (const f of r.archivos || []) {
+      try {
+        const s = await api(`/storage/v1/object/sign/adjuntos/${f.path.split('/').map(encodeURIComponent).join('/')}`, { method: 'POST', body: JSON.stringify({ expiresIn: 600 }) });
+        files.append(el('a', { href: `${SUPABASE_URL}/storage/v1${s.signedURL}`, target: '_blank', rel: 'noopener', text: `${f.nombre} (${Math.max(1, Math.round(f.bytes / 1024))} KB)` }));
+      } catch (_) { files.append(el('div', { text: `${f.nombre} (no disponible)` })); }
+    }
+  }
+  function closeDetail() { $('overlay').hidden = true; current = null; }
+  async function saveDetail() {
+    if (!current) return;
+    const body = { estado: $('selEstado').value, notas: $('txtNotas').value.trim() || null };
+    try {
+      await api(`/rest/v1/cotizaciones?id=eq.${current.id}`, { method: 'PATCH', headers: { Prefer: 'return=minimal' }, body: JSON.stringify(body) });
+      Object.assign(current, body); render(); closeDetail(); toast('Guardado');
+    } catch (_) { toast('No se pudo guardar'); }
+  }
+
+  function exportCsv() {
+    const cols = ['created_at', 'estado', 'tipo', 'nombre', 'empresa', 'correo', 'telefono', 'contacto_info', 'tension', 'requerimiento', 'cambio_direccion', 'longitud', 'terreno', 'cant_estructuras', 'conductor', 'fecha_entrega', 'partidas', 'descripcion', 'notas'];
+    const esc = (v) => { let s = String(v ?? ''); if (/^[=+\-@]/.test(s)) s = "'" + s; return '"' + s.replace(/"/g, '""') + '"'; }; // evita inyección de fórmulas
+    const csv = [cols.join(','), ...filtered().map((r) => cols.map((c) => esc(r[c])).join(','))].join('\n');
+    const a = el('a', { href: URL.createObjectURL(new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8' })), download: 'solicitudes.csv' });
+    a.click(); URL.revokeObjectURL(a.href);
+  }
+
+  // ---------- eventos ----------
+  $('loginForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    try {
+      session = await authRequest('token?grant_type=password', { email: $('email').value.trim(), password: $('password').value });
+      saveSession(); $('password').value = ''; await showApp();
+    } catch (err) { showLogin(err.message === 'Invalid login credentials' ? 'Correo o contraseña incorrectos.' : err.message); }
+  });
+  $('logout').addEventListener('click', async () => {
+    try { await api('/auth/v1/logout', { method: 'POST', body: '{}' }); } catch (_) {}
+    session = null; saveSession(); all = []; showLogin();
+  });
+  $('reload').addEventListener('click', load);
+  $('exportCsv').addEventListener('click', exportCsv);
+  ESTADOS.forEach((e) => $('fEstado').append(el('option', { value: e, text: e })));
+  ['q', 'fEstado', 'fTipo'].forEach((id) => $(id).addEventListener('input', render));
+  $('overlay').addEventListener('click', (e) => { if (e.target === $('overlay')) closeDetail(); });
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeDetail(); });
+
+  session = loadSession();
+  session ? showApp() : showLogin();
+})();
+</script>
+</body>
+</html>
