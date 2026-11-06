@@ -16,7 +16,7 @@ const VOLTAGE_SPECIFICATIONS = {
       'Alambre de amarre de aluminio suave y varillas de armar preformadas'
     ],
     structures: [
-      'Postes de concreto reforzado (PC 11-500, 12-750, 13-600), madera y acero',
+      'Postes de concreto reforzado (PC 11-500, 12-750, 13-600) y de acero',
       'Crucetas de acero galvanizado (tipo PR, PT, PV), madera tratada o poliméricas',
       'Bastidores, abrazaderas, tirantes planos y angulares galvanizados'
     ],
