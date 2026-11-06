@@ -387,6 +387,94 @@ document.addEventListener('DOMContentLoaded', () => {
   setupFileDropzone('specFiles', 'specDropzone', 'specFileList');
   setupFileDropzone('contactFiles', 'contactDropzone', 'contactFileList');
 
+  // 7b. Guardado de solicitudes en Supabase (tabla `cotizaciones` + bucket privado `adjuntos`)
+  // La clave "anon" es pública por diseño: la seguridad la dan las políticas RLS (solo INSERT).
+  const SUPABASE_URL = 'https://atsvcwvfapfzabrywjwx.supabase.co';
+  const SUPABASE_ANON_KEY =
+    'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImF0c3Zjd3ZmYXBmemFicnl3and4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTM5MTUyODEsImV4cCI6MjEwOTQ5MTI4MX0.jET54CTvKQcpAdpOrHL-n0j-eAoiwvDNlIjXO-Hmrdc';
+  const MAX_FILE_BYTES = 10 * 1024 * 1024;
+  const MIN_SECONDS_BETWEEN_SUBMITS = 20;
+
+  function safeFileName(name) {
+    return name
+      .normalize('NFD')
+      .replace(/[̀-ͯ]/g, '')
+      .replace(/[^a-zA-Z0-9._-]+/g, '_')
+      .slice(-100);
+  }
+
+  function sbHeaders(extra) {
+    return { apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${SUPABASE_ANON_KEY}`, ...(extra || {}) };
+  }
+
+  // Devuelve { ok, skipped, uploaded, failedFiles }. Nunca lanza: el flujo de WhatsApp/correo sigue siempre disponible.
+  async function saveRequest(row, fileList, honeypotId) {
+    try {
+      const trap = document.getElementById(honeypotId);
+      if (trap && trap.value) return { ok: true, skipped: true, uploaded: 0, failedFiles: [] }; // bot
+
+      try {
+        const last = Number(localStorage.getItem('use_last_submit_ts') || 0);
+        if (Date.now() - last < MIN_SECONDS_BETWEEN_SUBMITS * 1000) {
+          return { ok: false, throttled: true, uploaded: 0, failedFiles: [] };
+        }
+        localStorage.setItem('use_last_submit_ts', String(Date.now()));
+      } catch (_) {
+        // localStorage no disponible: se continúa sin límite local
+      }
+
+      const id = crypto.randomUUID();
+      const uploaded = [];
+      const failedFiles = [];
+
+      for (const [i, file] of Array.from(fileList || []).entries()) {
+        if (file.size > MAX_FILE_BYTES) {
+          failedFiles.push(`${file.name} (supera 10 MB)`);
+          continue;
+        }
+        const path = `${id}/${i}_${safeFileName(file.name)}`;
+        try {
+          const res = await fetch(`${SUPABASE_URL}/storage/v1/object/adjuntos/${path}`, {
+            method: 'POST',
+            headers: sbHeaders({ 'Content-Type': file.type || 'application/octet-stream' }),
+            body: file
+          });
+          if (res.ok) uploaded.push({ path, nombre: file.name, bytes: file.size });
+          else failedFiles.push(file.name);
+        } catch (_) {
+          failedFiles.push(file.name);
+        }
+      }
+
+      const res = await fetch(`${SUPABASE_URL}/rest/v1/cotizaciones`, {
+        method: 'POST',
+        headers: sbHeaders({ 'Content-Type': 'application/json', Prefer: 'return=minimal' }),
+        body: JSON.stringify({ id, ...row, archivos: uploaded })
+      });
+      return { ok: res.ok, uploaded: uploaded.length, failedFiles };
+    } catch (_) {
+      return { ok: false, uploaded: 0, failedFiles: [] };
+    }
+  }
+
+  function renderSaveStatus(el, result) {
+    if (result.skipped) {
+      el.remove();
+      return;
+    }
+    if (result.ok) {
+      let msg = '✓ Su solicitud quedó registrada en nuestro sistema.';
+      if (result.uploaded) msg += ` Archivos recibidos: ${result.uploaded}.`;
+      if (result.failedFiles.length) msg += ` No se pudieron subir: ${result.failedFiles.join(', ')}. Envíelos por WhatsApp o correo.`;
+      el.textContent = msg;
+    } else if (result.throttled) {
+      el.textContent = 'Ya recibimos una solicitud hace unos segundos. Espere un momento antes de enviar otra.';
+    } else {
+      el.textContent =
+        '⚠ No pudimos registrar la solicitud en línea. Por favor confirme el envío con los botones de WhatsApp o correo.';
+    }
+  }
+
   // 8. Envío funcional del Formulario de Especificaciones Técnicas (Sección 6)
   const technicalSpecForm = document.getElementById('technicalSpecForm');
   const specFormFeedback = document.getElementById('specFormFeedback');
@@ -447,6 +535,29 @@ document.addEventListener('DOMContentLoaded', () => {
           </a>
         </div>
       `;
+
+      const specStatus = document.createElement('div');
+      specStatus.style.marginTop = '0.6rem';
+      specStatus.textContent = 'Guardando solicitud…';
+      specFormFeedback.appendChild(specStatus);
+      saveRequest(
+        {
+          tipo: 'tecnica',
+          nombre: name,
+          contacto_info: contact,
+          tension: voltage,
+          longitud: length,
+          terreno: terrain,
+          cant_estructuras: structures,
+          angulo_horizontal: document.getElementById('specHorizontalAngle').value.trim() || null,
+          desnivel_vertical: document.getElementById('specVerticalChange').value.trim() || null,
+          conductor,
+          fecha_entrega: document.getElementById('specDeliveryDate').value || null,
+          partidas: selectedProducts.size > 0 ? Array.from(selectedProducts).join(', ') : null
+        },
+        filesInput && filesInput.files,
+        'specWebsite'
+      ).then((r) => renderSaveStatus(specStatus, r));
     });
   }
 
@@ -520,6 +631,27 @@ document.addEventListener('DOMContentLoaded', () => {
           </a>
         </div>
       `;
+
+      const contactStatus = document.createElement('div');
+      contactStatus.style.marginTop = '0.6rem';
+      contactStatus.textContent = 'Guardando solicitud…';
+      contactFormFeedback.appendChild(contactStatus);
+      const contactFilesInput = document.getElementById('contactFiles');
+      saveRequest(
+        {
+          tipo: 'contacto',
+          nombre: data.name,
+          empresa: data.company,
+          correo: data.email,
+          telefono: data.phone,
+          tension: data.voltage,
+          requerimiento: data.reqType,
+          cambio_direccion: data.direction,
+          descripcion: data.desc
+        },
+        contactFilesInput && contactFilesInput.files,
+        'contactWebsite'
+      ).then((r) => renderSaveStatus(contactStatus, r));
     });
   }
 
