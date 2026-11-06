@@ -202,4 +202,46 @@
     extraFields: [{ k: 'cobertura', label: 'Cobertura / rutas', type: 'textarea', placeholder: 'Ej. China → Colón (marítimo), Miami → Panamá (aéreo)…' }]
   });
   App.register('transportistas', 'Transportistas', { render: (main) => renderTransportistas(main) });
+
+  /* ---------------- Catálogo de productos ---------------- */
+  function productoForm(rec, done) {
+    const fields = [
+      { k: 'nombre', label: 'Nombre del producto', required: true, full: true }, { k: 'categoria', label: 'Categoría', type: 'select', options: App.ESPECIALIDADES },
+      { k: 'unidad', label: 'Unidad (und, m, km, juego…)', required: true }, { k: 'costo_ref', label: 'Costo de referencia', type: 'number', hint: 'Lo que te cuesta normalmente. Se usa para pre-llenar el costeo.' },
+      { k: 'moneda', label: 'Moneda', type: 'select', options: [['USD', 'USD'], ['PAB', 'PAB']], required: true },
+      { k: 'proveedor_id', label: 'Proveedor habitual', type: 'select', options: App.cache.proveedores.map((p) => [p.id, p.nombre]) },
+      { k: 'descripcion', label: 'Descripción / especificaciones', type: 'textarea' }, { k: 'activo', label: 'Activo (aparece al armar solicitudes y proformas)', type: 'bool' }
+    ];
+    App.formDialog({
+      title: rec ? 'Editar producto' : 'Nuevo producto', fields, values: rec || { unidad: 'und', moneda: 'USD' },
+      onSubmit: async (v) => { rec ? await App.patch('productos', rec.id, v) : await App.insert('productos', v); await App.loadDirs(true); done(); },
+      extraActions: rec && [
+        el('button', { class: 'btn ghost', type: 'button', text: 'Hojas de datos', onclick: () => App.openDialog(`Documentos — ${rec.nombre}`, App.docsBox({ scope: { producto_id: rec.id } }), true) }),
+        el('button', { class: 'btn danger', type: 'button', text: 'Eliminar', onclick: () => {
+          if (!confirm(`¿Eliminar ${rec.nombre}? También se borrarán sus documentos.`)) return;
+          App.guard(async () => { await App.del('productos', rec.id); await App.loadDirs(true); App.closeDialog(); done(); App.toast('Eliminado'); });
+        } })
+      ]
+    });
+  }
+  App.register('productos', 'Productos', {
+    async render(main) {
+      const q = el('input', { class: 'grow', type: 'search', placeholder: 'Buscar producto…' });
+      const cat = el('select', {}, el('option', { value: '', text: 'Todas las categorías' }), ...App.ESPECIALIDADES.map(([k, l]) => el('option', { value: k, text: l })));
+      const inact = el('input', { type: 'checkbox' }); const body = el('div', { class: 'table-wrap' });
+      main.replaceChildren(el('div', { class: 'toolbar' }, q, cat, el('label', { class: 'check' }, inact, 'Ver inactivos'), el('button', { class: 'btn', type: 'button', text: '+ Nuevo producto', onclick: () => productoForm(null, draw) })), body);
+      function draw() {
+        const t = q.value.trim().toLowerCase();
+        const rows = (App.cache.productos || []).filter((p) => (inact.checked || p.activo) && (!cat.value || p.categoria === cat.value) && (!t || [p.nombre, p.descripcion].some((v) => (v || '').toLowerCase().includes(t))));
+        if (!rows.length) return body.replaceChildren(el('div', { class: 'empty', text: 'No hay productos. Agrega el primero con el botón de arriba: luego podrás elegirlo al crear solicitudes y costear proformas.' }));
+        body.replaceChildren(el('table', {}, el('thead', {}, el('tr', {}, ...['Producto', 'Categoría', 'Unidad', 'Costo ref.', 'Proveedor habitual'].map((h, i) => el('th', { class: i === 3 ? 'num' : '', text: h })))),
+          el('tbody', {}, rows.map((p) => el('tr', { class: 'click', onclick: () => productoForm(p, draw) },
+            el('td', {}, el('b', { text: p.nombre }), p.descripcion ? el('div', { class: 'sub', text: p.descripcion.slice(0, 90) }) : null, p.activo ? null : App.badge('inactivo')),
+            el('td', {}, p.categoria ? App.badge(App.label(App.ESPECIALIDADES, p.categoria)) : null), el('td', { text: p.unidad }), el('td', { class: 'num', text: p.costo_ref ? App.money(p.costo_ref, p.moneda) : '—' }),
+            el('td', { text: (App.cache.proveedores.find((x) => x.id === p.proveedor_id) || {}).nombre || '' }))))));
+      }
+      [q, cat, inact].forEach((x) => x.addEventListener('input', draw));
+      await App.guard(async () => { await App.loadDirs(true); draw(); });
+    }
+  });
 })();

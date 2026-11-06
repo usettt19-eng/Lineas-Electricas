@@ -2,13 +2,13 @@
 (() => {
   'use strict';
   const { el, $ } = App;
-  const ORDER = ['solicitudes', 'clientes', 'proveedores', 'transportistas', 'finanzas', 'empresa'];
+  const ORDER = ['solicitudes', 'clientes', 'productos', 'proveedores', 'transportistas', 'finanzas', 'empresa'];
   let current = 'solicitudes';
 
   App.showLogin = (err) => {
     $('app').hidden = true; $('login').hidden = false;
     $('loginErr').hidden = !err; $('loginErr').textContent = err || '';
-    App.closeDialog(); $('drawer').hidden = true;
+    App.closeDialog(); App.closeDialog(true); $('drawer').hidden = true;
   };
 
   function go(id) {
@@ -41,7 +41,8 @@
   $('reload').addEventListener('click', () => { App.cache = {}; go(current); });
   $('drawer').addEventListener('click', (e) => { if (e.target === $('drawer')) App.closeDrawer(); });
   $('modal').addEventListener('click', (e) => { if (e.target === $('modal')) App.closeDialog(); });
-  document.addEventListener('keydown', (e) => { if (e.key === 'Escape') { if (!$('modal').hidden) App.closeDialog(); else if (!$('drawer').hidden) App.closeDrawer(); } });
+  $('modal2').addEventListener('click', (e) => { if (e.target === $('modal2')) App.closeDialog(true); });
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape') { if (!$('modal2').hidden) App.closeDialog(true); else if (!$('modal').hidden) App.closeDialog(); else if (!$('drawer').hidden) App.closeDrawer(); } });
 
   App.loadSession() ? showApp() : App.showLogin();
 })();

@@ -11,6 +11,7 @@
     s.value = value ?? ''; return s;
   };
   const incoOpts = App.INCOTERMS.map((i) => [i, i]);
+  const tipoLabel = (r, long) => (r.tipo === 'manual' ? `Manual · ${App.label(App.ORIGENES, r.origen)}` : r.tipo === 'tecnica' ? (long ? 'Especificación técnica' : 'Técnica') : long ? 'Contacto y cotización' : 'Contacto');
   const sig = () => {
     const b = App.brand || {};
     return [b.contact && b.name ? `${b.contact} — ${b.name}` : b.contact || b.name, b.phone, b.email].filter(Boolean).join('\n');
@@ -29,7 +30,8 @@
     line('Longitud aproximada', r.longitud); line('Terreno', r.terreno); line('Cantidad de estructuras', r.cant_estructuras);
     line('Ángulos horizontales', r.angulo_horizontal); line('Desnivel vertical', r.desnivel_vertical); line('Conductor', r.conductor);
     line('Entrega estimada', r.fecha_entrega ? App.fmtDay(r.fecha_entrega) : null);
-    if (r.partidas) L.push('', 'PARTIDAS SOLICITADAS', r.partidas);
+    if ((r.items || []).length) L.push('', 'PARTIDAS SOLICITADAS', ...r.items.map((i, n) => `${i.codigo || n + 1}. ${i.descripcion} — ${i.cantidad} ${i.unidad}${i.notas ? ' (' + i.notas + ')' : ''}`));
+    else if (r.partidas) L.push('', 'PARTIDAS SOLICITADAS', r.partidas);
     if (r.descripcion) L.push('', 'DESCRIPCIÓN', r.descripcion);
     const n = (r.archivos || []).length; if (n) L.push('', `Documentos técnicos: ${n} archivo(s), se enviarán por separado.`);
     return L.join('\n');
@@ -41,8 +43,9 @@
       ['opgw', /opgw|fibra/], ['tendido', /tendido|accesorios/]].forEach(([k, re]) => re.test(t) && out.add(k));
     return out;
   }
-  const provMessage = (r, p) =>
-    `Estimados ${p ? p.contacto || p.nombre : 'proveedores'}:\n\nSolicitamos cotización para el siguiente suministro:\n\n${summaryText(r, false)}\n\nFavor indicar: precio unitario y total, Incoterm (EXW/FOB y puerto de embarque), plazo de entrega, condiciones de pago, validez de la oferta y fichas técnicas.\n\nSaludos cordiales,\n${sig()}`;
+  const shareText = (share) => (share && share.docs.length ? `\n\nDocumentos técnicos (enlaces de descarga válidos hasta el ${share.until}):\n${share.docs.map((d) => `• ${d.nombre}: ${d.url}`).join('\n')}` : '');
+  const provMessage = (r, p, share) =>
+    `Estimados ${p ? p.contacto || p.nombre : 'proveedores'}:\n\nSolicitamos cotización para el siguiente suministro:\n\n${summaryText(r, false)}${shareText(share)}\n\nFavor indicar: precio unitario y total, Incoterm (EXW/FOB y puerto de embarque), plazo de entrega, condiciones de pago, validez de la oferta y fichas técnicas.\n\nSaludos cordiales,\n${sig()}`;
   function fleteMessage(r, t, f) {
     const L = [`Estimados ${t ? t.contacto || t.nombre : 'transportistas'}:`, '', `Solicitamos cotización de flete para el siguiente embarque (ref. ${App.folio(r)}):`, ''];
     const line = (l, v) => v !== null && v !== undefined && v !== '' && L.push(`• ${l}: ${v}`);
@@ -53,11 +56,13 @@
     L.push('', `Favor cotizar de forma desglosada para condiciones ${f.incoterm || 'FOB'} y CIF: flete, seguro, gastos en origen, gastos en destino, tiempo de tránsito y validez de la oferta.`, '', 'Saludos cordiales,', sig());
     return L.join('\n');
   }
-  async function signedLinks(archivos, into) {
+  async function signedLinks(archivos, into, onImport) {
     for (const f of archivos || []) {
       try {
         const s = await App.api(`/storage/v1/object/sign/adjuntos/${f.path.split('/').map(encodeURIComponent).join('/')}`, { method: 'POST', body: JSON.stringify({ expiresIn: 600 }) });
-        into.append(el('div', {}, el('a', { href: `${App.SUPABASE_URL}/storage/v1${s.signedURL}`, target: '_blank', rel: 'noopener', text: `${f.nombre} (${Math.max(1, Math.round(f.bytes / 1024))} KB)` })));
+        const url = `${App.SUPABASE_URL}/storage/v1${s.signedURL}`;
+        into.append(el('div', { class: 'doc-row' }, el('a', { href: url, target: '_blank', rel: 'noopener', text: `${f.nombre} (${Math.max(1, Math.round(f.bytes / 1024))} KB)` }),
+          onImport && /\.(xlsx|xls|csv)$/i.test(f.nombre) ? el('button', { class: 'btn ghost small', type: 'button', text: 'Importar partidas', onclick: async () => { try { onImport(new File([await (await fetch(url)).blob()], f.nombre)); } catch (_) { App.toast('No se pudo abrir el archivo.'); } } }) : null));
       } catch (_) { into.append(el('div', { text: `${f.nombre} (no disponible)` })); }
     }
   }
@@ -86,11 +91,11 @@
   App.register('solicitudes', 'Pipeline', {
     async render(main) {
       const q = el('input', { class: 'grow', type: 'search', placeholder: 'Buscar por cliente, empresa, correo, folio…' });
-      const fTipo = sel([['', 'Todos los tipos'], ['tecnica', 'Técnica'], ['contacto', 'Contacto']], '');
+      const fTipo = sel([['', 'Todos los tipos'], ['tecnica', 'Técnica'], ['contacto', 'Contacto'], ['manual', 'Manual']], '');
       const fEtapa = sel([['', 'Todas las etapas'], ...App.SOL_ETAPAS], '');
       const seg = el('div', { class: 'seg' }, el('button', { type: 'button', 'data-v': 'tablero', text: 'Tablero' }), el('button', { type: 'button', 'data-v': 'lista', text: 'Lista' }));
       const stats = el('div', { class: 'stats' }); const body = el('div');
-      main.replaceChildren(stats, el('div', { class: 'toolbar' }, seg, q, fTipo, fEtapa, el('button', { class: 'btn ghost', type: 'button', text: 'Exportar CSV', onclick: exportCsv })), body);
+      main.replaceChildren(stats, el('div', { class: 'toolbar' }, el('button', { class: 'btn', type: 'button', text: '+ Nueva solicitud', onclick: () => App.nuevaSolicitud() }), seg, q, fTipo, fEtapa, el('button', { class: 'btn ghost', type: 'button', text: 'Exportar CSV', onclick: exportCsv })), body);
 
       const filtered = () => {
         const t = q.value.trim().toLowerCase();
@@ -103,9 +108,9 @@
       }
       const card = (r) => el('div', { class: 'card', onclick: () => App.openSolicitud(r.id) },
         el('b', { text: r.nombre }), r.empresa ? el('div', { class: 'meta', text: r.empresa }) : null,
-        el('div', { class: 'meta', text: `${r.tension} · ${r.tipo === 'tecnica' ? 'Técnica' : 'Contacto'}` }),
+        el('div', { class: 'meta', text: `${r.tension} · ${tipoLabel(r)}` }),
         el('div', { class: 'meta', text: `${App.folio(r)} · ${App.fmtDate(r.created_at)}` }),
-        r.clientes ? App.badge('Cliente: ' + r.clientes.nombre, 'info') : null, (r.archivos || []).length ? App.badge('📎 ' + r.archivos.length) : null);
+        r.clientes ? App.badge('Cliente: ' + r.clientes.nombre, 'info') : null, (r.archivos || []).length ? App.badge('📎 ' + r.archivos.length) : null, (r.items || []).length ? App.badge(r.items.length + ' partidas') : null);
 
       function draw() {
         const all = S.rows, n = (...e) => all.filter((r) => e.includes(r.estado)).length;
@@ -125,7 +130,7 @@
           el('thead', {}, el('tr', {}, ...['Fecha', 'Folio', 'Cliente', 'Tipo', 'Tensión', 'Archivos', 'Etapa'].map((h) => el('th', { text: h })))),
           el('tbody', {}, rows.map((r) => el('tr', { class: 'click', onclick: () => App.openSolicitud(r.id) },
             el('td', { text: App.fmtDate(r.created_at) }), el('td', { text: App.folio(r) }), el('td', {}, el('b', { text: r.nombre }), r.empresa ? el('div', { class: 'sub', text: r.empresa }) : null),
-            el('td', { text: r.tipo === 'tecnica' ? 'Técnica' : 'Contacto' }), el('td', { text: r.tension }), el('td', { text: (r.archivos || []).length || '—' }), el('td', {}, App.stageBadge(r.estado))))))));
+            el('td', { text: tipoLabel(r) }), el('td', { text: r.tension }), el('td', { text: (r.archivos || []).length || '—' }), el('td', {}, App.stageBadge(r.estado))))))));
       }
       seg.addEventListener('click', (e) => { const v = e.target.dataset && e.target.dataset.v; if (v) { S.view = v; draw(); } });
       [q, fTipo, fEtapa].forEach((x) => x.addEventListener('input', draw));
@@ -134,6 +139,43 @@
       });
     }
   });
+
+  // ============ NUEVA SOLICITUD (manual) ============
+  App.nuevaSolicitud = async () => {
+    await App.guard(async () => {
+      await App.loadDirs();
+      const ed = App.itemsEditor([], { nombre: 'solicitud' }); const f = {};
+      const mk = (k, label, node, full) => { f[k] = node; return el('div', { class: 'field' + (full ? ' full' : '') }, el('label', { text: label }), node); };
+      const cliSel = sel([['', 'Cliente nuevo / sin vincular'], ...App.cache.clientes.filter((c) => c.activo).map((c) => [c.id, c.nombre + (c.empresa ? ' · ' + c.empresa : '')])], '');
+      const err = el('div', { class: 'msg-err full', hidden: true });
+      const form = el('form', { class: 'grid2', novalidate: true },
+        mk('origen', 'Origen de la solicitud', sel(App.ORIGENES.filter((o) => o[0] !== 'web'), 'whatsapp')), el('div', { class: 'field' }, el('label', { text: 'Cliente existente' }), cliSel),
+        mk('nombre', 'Nombre de contacto *', el('input', {})), mk('empresa', 'Empresa', el('input', {})), mk('correo', 'Correo', el('input', { type: 'email' })), mk('telefono', 'Teléfono / WhatsApp', el('input', {})),
+        mk('tension', 'Nivel de tensión', sel([['13.8 kV', '13.8 kV'], ['34.5 kV', '34.5 kV'], ['115 kV', '115 kV'], ['230 kV', '230 kV'], ['Por definir', 'Por definir']], 'Por definir')),
+        mk('requerimiento', 'Tipo de requerimiento', sel([['', '—'], ['Línea nueva', 'Línea nueva'], ['Ampliación', 'Ampliación'], ['Mantenimiento', 'Mantenimiento'], ['Emergencia', 'Emergencia']], '')),
+        mk('cambio_direccion', 'Cambio de dirección', sel([['', '—'], ['Horizontal', 'Horizontal'], ['Vertical', 'Vertical'], ['Ambos', 'Ambos (Horizontal y Vertical)']], '')), mk('fecha_entrega', 'Entrega estimada', el('input', { type: 'date' })),
+        mk('descripcion', 'Descripción / alcance', el('textarea', {}), true),
+        el('div', { class: 'full' }, el('h3', { text: 'Partidas (tabla de materiales)' }), el('p', { class: 'sub', text: 'Elige productos del catálogo, escribe líneas libres o importa la tabla que envió el cliente. Los planos y especificaciones los adjuntas al crear la solicitud.' }), ed.node), err,
+        el('div', { class: 'actions full' }, el('button', { class: 'btn', type: 'submit', text: 'Crear solicitud' })));
+      cliSel.addEventListener('change', () => {
+        const c = App.cache.clientes.find((x) => x.id === cliSel.value); if (!c) return;
+        [['nombre', c.nombre], ['empresa', c.empresa], ['correo', c.correo], ['telefono', c.telefono]].forEach(([k, v]) => { if (!f[k].value.trim() && v) f[k].value = v; });
+      });
+      form.addEventListener('submit', (e) => {
+        e.preventDefault(); err.hidden = true;
+        const v = (k) => f[k].value.trim() || null; const nombre = v('nombre');
+        if (!nombre || nombre.length < 2) { err.textContent = 'Indica el nombre de contacto.'; err.hidden = false; return; }
+        const items = ed.get();
+        App.guard(async () => {
+          const row = await App.insert('cotizaciones', { tipo: 'manual', origen: f.origen.value, estado: 'nueva', nombre, empresa: v('empresa'), correo: v('correo'), telefono: v('telefono'), tension: f.tension.value, requerimiento: v('requerimiento'),
+            cambio_direccion: v('cambio_direccion'), descripcion: v('descripcion'), fecha_entrega: v('fecha_entrega'), items, partidas: App.itemsText(items) || null, cliente_id: cliSel.value || null });
+          for (const file of ed.pendingFiles()) { try { await App.uploadDocument(file, { scope: { cotizacion_id: row.id }, tipo: 'computo', de: 'cliente' }); } catch (_) { App.toast('No se pudo guardar el archivo original.'); } }
+          App.closeDialog(); App.toast('Solicitud creada: ' + App.folio(row)); App.views.solicitudes.render(App.$('main')); App.openSolicitud(row.id, 'resumen');
+        });
+      });
+      App.openDialog('Nueva solicitud (manual)', form, true);
+    });
+  };
 
   // ============ DETALLE ============
   App.openSolicitud = async (id, tab) => {
@@ -168,7 +210,7 @@
     stage.addEventListener('change', () => App.guard(async () => { await setStage(D, stage.value); App.toast('Etapa actualizada'); renderDetail(D); }));
     const body = { resumen: tabResumen, proveedores: tabProveedores, transporte: tabTransporte, costeo: tabCosteo, cobros: tabCobros }[D.tab](D);
     App.openDrawer(el('div', {},
-      el('div', { class: 'panel-head' }, el('div', {}, el('h2', { text: r.nombre + (r.empresa ? ' · ' + r.empresa : '') }), el('div', { class: 'sub', text: `${App.folio(r)} · ${App.fmtDate(r.created_at)} · ${r.tipo === 'tecnica' ? 'Especificación técnica' : 'Contacto y cotización'}` })),
+      el('div', { class: 'panel-head' }, el('div', {}, el('h2', { text: r.nombre + (r.empresa ? ' · ' + r.empresa : '') }), el('div', { class: 'sub', text: `${App.folio(r)} · ${App.fmtDate(r.created_at)} · ${tipoLabel(r, true)}` })),
         el('div', { class: 'actions' }, stage, el('button', { class: 'btn ghost small', type: 'button', text: 'Cerrar', onclick: App.closeDrawer }))),
       el('div', { class: 'subtabs' }, tabs.map(([k, l]) => el('button', { type: 'button', class: D.tab === k ? 'active' : '', text: l, onclick: () => { D.tab = k; renderDetail(D); } }))), body));
     App.$('panel').scrollTop = top;
@@ -210,14 +252,28 @@
       el('div', { class: 'actions' }, el('button', { class: 'btn small', type: 'button', text: 'Copiar', onclick: () => App.copy(ta.value) }),
         el('button', { class: 'btn ghost small', type: 'button', text: 'Imprimir / PDF', onclick: () => App.printHtml(App.folio(r), `<h1>${App.esc(App.folio(r))}</h1><pre>${App.esc(ta.value)}</pre>`) })));
 
+    const ed = App.itemsEditor(r.items, { cotizacion_id: r.id, nombre: App.folio(r) });
+    const partidasBox = el('div', { class: 'box' }, el('h3', { text: 'Partidas solicitadas (tabla de materiales / cómputos métricos)' }),
+      el('p', { class: 'sub', text: 'Es la tabla que se trabaja y se pasa a los proveedores: impórtala del Excel del cliente, edítala aquí y descárgala para enviarla a cotizar.' }), ed.node,
+      el('div', { class: 'actions' }, el('button', { class: 'btn small', type: 'button', text: 'Guardar partidas', onclick: () => App.guard(async () => {
+        const items = ed.get(); await App.patch('cotizaciones', r.id, { items, partidas: App.itemsText(items) || r.partidas || null });
+        r.items = items; if (items.length) r.partidas = App.itemsText(items); App.toast('Partidas guardadas'); renderDetail(D);
+      }) })));
+    const docsNode = App.docsBox({ title: 'Documentos de esta solicitud (planos, especificaciones, cómputos métricos, hojas de datos)', scope: { cotizacion_id: r.id }, onImport: (file) => ed.importFile(file) });
+    const askTable = (via) => {
+      const text = `Hola ${r.nombre}, para cotizar con precisión necesitamos la lista de materiales o cómputos métricos en Excel (columnas: Ítem, Descripción, Unidad, Cantidad). Puede usar esta plantilla: ${location.origin}/plantilla-materiales.xlsx\n\nSi tiene planos, especificaciones técnicas u hojas de datos, envíelos también por este medio.\n\n${sig()}`;
+      App.openLink(via === 'wa' ? App.waLink(phone, text) : App.mailLink(mail, `Lista de materiales para su cotización ${App.folio(r)}`, text));
+    };
     const notas = el('textarea', { placeholder: 'Notas internas (no las ve el cliente)', value: r.notas || '' });
-    const files = el('div'); signedLinks(r.archivos, files);
+    const files = el('div'); signedLinks(r.archivos, files, (file) => ed.importFile(file));
     return el('div', {},
       el('div', { class: 'box' }, dl, el('div', { class: 'actions' },
         phone.length >= 7 && el('a', { class: 'btn wa small', target: '_blank', rel: 'noopener', href: App.waLink(phone, `Hola ${r.nombre}, recibimos su solicitud de cotización de línea ${r.tension}. `), text: 'WhatsApp' }),
         mail && el('a', { class: 'btn mail small', href: `mailto:${mail}?subject=${encodeURIComponent('Su solicitud de cotización ' + r.tension)}`, text: 'Correo' }),
-        phone.length >= 7 && el('a', { class: 'btn ghost small', href: `tel:+${phone}`, text: 'Llamar' }))),
-      cli, resumen,
+        phone.length >= 7 && el('a', { class: 'btn ghost small', href: `tel:+${phone}`, text: 'Llamar' }),
+        phone.length >= 7 && el('button', { class: 'btn wa small', type: 'button', text: 'Pedir tabla de materiales (WhatsApp)', onclick: () => askTable('wa') }),
+        mail && el('button', { class: 'btn mail small', type: 'button', text: 'Pedir tabla (correo)', onclick: () => askTable('mail') }))),
+      cli, partidasBox, docsNode, resumen,
       el('div', { class: 'box' }, el('h3', { text: 'Notas internas' }), notas, el('div', { class: 'actions' }, el('button', { class: 'btn small', type: 'button', text: 'Guardar notas', onclick: () => App.guard(async () => { await App.patch('cotizaciones', r.id, { notas: notas.value.trim() || null }); r.notas = notas.value.trim() || null; App.toast('Notas guardadas'); }) }))),
       (r.archivos || []).length ? el('div', { class: 'box' }, el('h3', { text: 'Archivos adjuntos' }), files) : null);
   }
@@ -240,23 +296,49 @@
       const cands = App.cache.proveedores.filter((p) => p.activo && (D.showAllProv || D.espSel.size === 0 || (p.especialidades || []).some((e) => D.espSel.has(e))));
       if (!cands.length) { list.replaceChildren(el('div', { class: 'empty', text: App.cache.proveedores.length ? 'Ningún proveedor activo coincide con esas especialidades.' : 'Aún no hay proveedores. Agrégalos en la pestaña “Proveedores” del menú.' })); }
       else list.replaceChildren(...cands.map((p) => {
-        const sent = D.rfqs.find((x) => x.proveedor_id === p.id); const msg = provMessage(r, p);
+        const sent = D.rfqs.find((x) => x.proveedor_id === p.id); const msg = () => provMessage(r, p, D.share);
         const chk = el('input', { type: 'checkbox', checked: D.provChecked.has(p.id) }); chk.addEventListener('change', () => { chk.checked ? D.provChecked.add(p.id) : D.provChecked.delete(p.id); });
         return el('div', { class: 'row-card' }, el('div', { class: 'head' }, el('label', { class: 'check' }, chk, el('b', { text: p.nombre })), sent ? App.stageBadge(sent.estado) : App.badge('sin enviar')),
           el('div', { class: 'sub', text: [p.contacto, p.pais].filter(Boolean).join(' · ') }), el('div', {}, (p.especialidades || []).map((k) => App.badge(App.label(App.ESPECIALIDADES, k)))),
           el('div', { class: 'actions' },
-            p.whatsapp && el('button', { class: 'btn wa small', type: 'button', text: 'WhatsApp', onclick: () => { App.openLink(App.waLink(p.whatsapp, msg)); registerRfq(D, p, 'whatsapp'); } }),
-            p.correo && el('button', { class: 'btn mail small', type: 'button', text: 'Correo', onclick: () => { App.openLink(App.mailLink(p.correo, `Solicitud de cotización ${App.folio(r)} — ${r.tension}`, msg)); registerRfq(D, p, 'correo'); } }),
-            el('button', { class: 'btn ghost small', type: 'button', text: 'Copiar mensaje', onclick: () => App.copy(msg) }),
+            p.whatsapp && el('button', { class: 'btn wa small', type: 'button', text: 'WhatsApp', onclick: () => { App.openLink(App.waLink(p.whatsapp, msg())); registerRfq(D, p, 'whatsapp'); } }),
+            p.correo && el('button', { class: 'btn mail small', type: 'button', text: 'Correo', onclick: () => { App.openLink(App.mailLink(p.correo, `Solicitud de cotización ${App.folio(r)} — ${r.tension}`, msg())); registerRfq(D, p, 'correo'); } }),
+            el('button', { class: 'btn ghost small', type: 'button', text: 'Copiar mensaje', onclick: () => App.copy(msg()) }),
             !sent && el('button', { class: 'btn ghost small', type: 'button', text: 'Marcar como enviada', onclick: () => registerRfq(D, p, 'manual') })));
       }));
       bulk.replaceChildren(el('button', { class: 'btn mail small', type: 'button', text: 'Correo a seleccionados (CCO)', onclick: () => {
         const ps = App.cache.proveedores.filter((p) => D.provChecked.has(p.id) && p.correo); if (!ps.length) return App.toast('Marca proveedores con correo');
-        App.openLink(App.mailLink('', `Solicitud de cotización ${App.folio(r)} — ${r.tension}`, provMessage(r, null), ps.map((p) => p.correo).join(',')));
+        App.openLink(App.mailLink('', `Solicitud de cotización ${App.folio(r)} — ${r.tension}`, provMessage(r, null, D.share), ps.map((p) => p.correo).join(',')));
         ps.forEach((p) => registerRfq(D, p, 'correo'));
-      } }), el('button', { class: 'btn ghost small', type: 'button', text: 'Copiar mensaje general', onclick: () => App.copy(provMessage(r, null)) }));
+      } }), el('button', { class: 'btn ghost small', type: 'button', text: 'Copiar mensaje general', onclick: () => App.copy(provMessage(r, null, D.share)) }));
     }
     drawList();
+
+    // Documentos del cliente para compartir con proveedores (enlaces temporales)
+    const shareBox = el('div', { class: 'box' }, el('h3', { text: 'Documentos y tabla para los proveedores' }), el('div', { class: 'sub', text: 'Cargando documentos…' }));
+    App.get('documentos', `cotizacion_id=eq.${r.id}&select=*&order=created_at.desc`).then((docs) => {
+      const cand = docs.filter((d) => d.de !== 'interno');
+      if (!D.shareSel) D.shareSel = new Set(cand.filter((d) => ['plano', 'computo', 'especificacion', 'hoja_datos'].includes(d.tipo)).map((d) => d.id));
+      const days = sel([['3', '3 días'], ['7', '7 días'], ['14', '14 días'], ['30', '30 días']], String(D.shareDays || 7)); const status = el('div', { class: 'sub' });
+      async function build() {
+        D.shareDays = Number(days.value); const chosen = cand.filter((d) => D.shareSel.has(d.id));
+        if (!chosen.length) { D.share = null; status.textContent = 'No se incluirán enlaces de documentos en el mensaje.'; return; }
+        status.textContent = 'Generando enlaces…';
+        try {
+          const until = new Date(Date.now() + D.shareDays * 86400000).toLocaleDateString('es-PA', { day: 'numeric', month: 'long', year: 'numeric' }); const out = [];
+          for (const d of chosen) out.push({ nombre: d.nombre, url: await App.signDoc(d.path, D.shareDays * 86400) });
+          D.share = { docs: out, until }; status.textContent = `${out.length} enlace(s) se incluirán en los mensajes; válidos hasta el ${until}.`;
+        } catch (_) { D.share = null; status.textContent = 'No se pudieron generar los enlaces.'; }
+      }
+      days.addEventListener('input', build);
+      const checks = cand.map((d) => { const c = el('input', { type: 'checkbox', checked: D.shareSel.has(d.id) }); c.addEventListener('change', () => { c.checked ? D.shareSel.add(d.id) : D.shareSel.delete(d.id); build(); }); return el('label', { class: 'check' }, c, `${d.nombre} `, App.badge(App.label(App.DOC_TIPOS, d.tipo)), App.badge(App.label(App.DOC_DE, d.de))); });
+      shareBox.replaceChildren(el('h3', { text: 'Documentos y tabla para los proveedores' }),
+        el('p', { class: 'sub', text: 'Marca los documentos del cliente que irán como enlaces de descarga dentro del mensaje. Cualquiera con el enlace podrá descargarlos hasta que venza: revisa que no incluyan datos del cliente que no quieras compartir.' }),
+        ...(checks.length ? checks : [el('div', { class: 'sub', text: 'Aún no hay documentos. Adjúntalos en la pestaña Resumen (planos, especificaciones, cómputo métrico).' })]),
+        checks.length ? el('div', { class: 'actions' }, el('span', { class: 'sub', text: 'Validez de los enlaces:' }), days) : null, status,
+        (r.items || []).length ? el('div', { class: 'actions' }, el('button', { class: 'btn ghost small', type: 'button', text: 'Descargar tabla de partidas para cotizar (Excel)', onclick: () => App.exportItems(r.items, { name: `${App.folio(r)}-para-cotizar`, modo: 'proveedor' }) })) : null);
+      build();
+    }).catch(() => shareBox.replaceChildren(el('div', { class: 'msg-err', text: 'No se pudieron cargar los documentos.' })));
 
     // Ofertas registradas
     const priced = D.rfqs.filter((x) => ['respondida', 'negociacion', 'aceptada', 'ordenada', 'entregada'].includes(x.estado) && x.precio_total);
@@ -274,9 +356,10 @@
             if (b.estado !== 'enviada' && !x.respondida_at) b.respondida_at = new Date().toISOString();
             Object.assign(x, await App.patch('rfq_proveedor', x.id, b)); App.toast('Oferta guardada'); renderDetail(D);
           }) }),
-          el('button', { class: 'btn ghost small', type: 'button', text: 'Quitar', onclick: () => confirm('¿Quitar esta solicitud al proveedor?') && App.guard(async () => { await App.del('rfq_proveedor', x.id); D.rfqs = D.rfqs.filter((y) => y.id !== x.id); renderDetail(D); }) })));
+          el('button', { class: 'btn ghost small', type: 'button', text: 'Quitar', onclick: () => confirm('¿Quitar esta solicitud al proveedor?') && App.guard(async () => { await App.del('rfq_proveedor', x.id); D.rfqs = D.rfqs.filter((y) => y.id !== x.id); renderDetail(D); }) })), App.docsBox({ title: 'Hoja de datos y documentos de esta oferta', scope: { rfq_id: x.id }, compact: true }));
     });
     return el('div', {},
+      shareBox,
       el('div', { class: 'box' }, el('h3', { text: 'Enviar solicitud de cotización a proveedores' }), el('p', { class: 'sub', text: 'El mensaje incluye el resumen técnico SIN datos del cliente. Se abre WhatsApp o el correo con el texto listo y el envío queda registrado.' }),
         el('div', { class: 'sub', text: 'Especialidades (sugeridas según lo solicitado):' }), chips, el('label', { class: 'check' }, all, 'Mostrar todos los proveedores activos'), bulk, list),
       el('div', { class: 'box' }, el('h3', { text: 'Ofertas y respuestas' }), D.rfqs.length ? cards : el('div', { class: 'empty', text: 'Aún no has enviado solicitudes a proveedores.' })));
@@ -382,7 +465,7 @@
   function pfMessage(D, pf) {
     const c = cliInfo(D); const k = pfCalc(pf.items, pf.itbms_pct);
     return [`Estimado ${c.nombre}:`, '', `Le enviamos la proforma ${pf.numero} correspondiente a su solicitud ${App.folio(D.r)}.`, '',
-      ...pf.items.map((i) => `• ${i.descripcion} — ${i.cantidad} x ${App.money(unitPrice(i), pf.moneda)} = ${App.money(lineTotal(i), pf.moneda)}`), '',
+      ...pf.items.map((i) => `• ${i.descripcion} — ${i.cantidad}${i.unidad ? ' ' + i.unidad : ''} x ${App.money(unitPrice(i), pf.moneda)} = ${App.money(lineTotal(i), pf.moneda)}`), '',
       `Subtotal: ${App.money(k.subtotal, pf.moneda)}`, pf.itbms_pct > 0 ? `ITBMS (${pf.itbms_pct}%): ${App.money(k.itbms, pf.moneda)}` : null, `TOTAL: ${App.money(k.total, pf.moneda)}`, '',
       `Validez de la oferta: ${pf.validez_dias} días.`, pf.condiciones_pago ? `Condiciones de pago: ${pf.condiciones_pago}` : null, pf.notas_cliente || null, '', 'Quedamos atentos a sus comentarios.', sig()].filter((x) => x !== null).join('\n');
   }
@@ -390,11 +473,11 @@
     const b = App.brand || {}; const c = cliInfo(D); const k = pfCalc(pf.items, pf.itbms_pct); const e = App.esc;
     const created = new Date(pf.created_at || Date.now()); const until = new Date(created.getTime() + pf.validez_dias * 86400000);
     return `<div class="head"><div><h1>${e(b.name)}</h1><div class="muted">${e(b.address)}<br>${e(b.phone)} · ${e(b.email)}</div></div>
-      <div style="text-align:right"><h1>PROFORMA</h1><div><b>${e(pf.numero || 'BORRADOR')}</b></div><div class="muted">Fecha: ${created.toLocaleDateString('es-PA')}<br>Válida hasta: ${until.toLocaleDateString('es-PA')}</div></div></div>
+      <div style="text-align:right"><h1>PROFORMA</h1><div><b>${e(pf.numero || 'BORRADOR')}</b></div><div class="muted">Fecha: ${created.toLocaleDateString('es-PA', { day: 'numeric', month: 'long', year: 'numeric' })}<br>Válida hasta: ${until.toLocaleDateString('es-PA', { day: 'numeric', month: 'long', year: 'numeric' })}</div></div></div>
       <h2>Cliente</h2><div>${e(c.nombre)}${c.empresa ? ' — ' + e(c.empresa) : ''}${c.ruc ? '<br>RUC: ' + e(c.ruc) : ''}${c.correo ? '<br>' + e(c.correo) : ''}${c.direccion ? '<br>' + e(c.direccion) : ''}</div>
       <div class="muted">Ref. solicitud ${e(App.folio(D.r))} — Línea eléctrica ${e(D.r.tension)}</div>
       <table><thead><tr><th>Descripción</th><th class="r">Cant.</th><th class="r">Precio unit.</th><th class="r">Total</th></tr></thead><tbody>
-      ${pf.items.map((i) => `<tr><td>${e(i.descripcion)}</td><td class="r">${e(i.cantidad)}</td><td class="r">${e(App.money(unitPrice(i), pf.moneda))}</td><td class="r">${e(App.money(lineTotal(i), pf.moneda))}</td></tr>`).join('')}
+      ${pf.items.map((i) => `<tr><td>${e(i.descripcion)}</td><td class="r">${e(i.cantidad)} ${e(i.unidad || '')}</td><td class="r">${e(App.money(unitPrice(i), pf.moneda))}</td><td class="r">${e(App.money(lineTotal(i), pf.moneda))}</td></tr>`).join('')}
       </tbody><tfoot><tr><td colspan="3" class="r">Subtotal</td><td class="r">${e(App.money(k.subtotal, pf.moneda))}</td></tr>
       ${pf.itbms_pct > 0 ? `<tr><td colspan="3" class="r">ITBMS (${e(pf.itbms_pct)}%)</td><td class="r">${e(App.money(k.itbms, pf.moneda))}</td></tr>` : ''}
       <tr class="tot"><td colspan="3" class="r">TOTAL</td><td class="r">${e(App.money(k.total, pf.moneda))}</td></tr></tfoot></table>
@@ -424,7 +507,7 @@
       tbody.replaceChildren(...pf.items.map((i, idx) => {
         const bind = (inp, k, isNum) => { inp.addEventListener('input', () => { i[k] = isNum ? App.num(inp.value) ?? 0 : inp.value; recalc(); }); return inp; };
         return el('tr', {}, el('td', {}, bind(el('input', { value: i.descripcion, disabled: locked }), 'descripcion')),
-          el('td', {}, bind(numInput(i.cantidad, { disabled: locked, style: 'width:70px' }), 'cantidad', true)), el('td', {}, bind(numInput(i.costo_unit, { disabled: locked, style: 'width:110px' }), 'costo_unit', true)),
+          el('td', {}, bind(numInput(i.cantidad, { disabled: locked, style: 'width:70px' }), 'cantidad', true)), el('td', {}, bind(el('input', { value: i.unidad || '', disabled: locked, style: 'width:60px' }), 'unidad')), el('td', {}, bind(numInput(i.costo_unit, { disabled: locked, style: 'width:110px' }), 'costo_unit', true)),
           el('td', {}, bind(numInput(i.utilidad_pct, { disabled: locked, style: 'width:80px' }), 'utilidad_pct', true)), el('td', { class: 'num pu' }), el('td', { class: 'num lt' }),
           el('td', {}, !locked && el('button', { class: 'btn ghost small', type: 'button', text: '✕', onclick: () => { pf.items.splice(idx, 1); drawRows(); } })));
       })); recalc();
@@ -453,9 +536,17 @@
           const d = newDraft(D); if (!d.items.length) return App.toast('No hay ofertas aceptadas ni fletes contratados. Acepta una oferta en la pestaña Proveedores, o agrega líneas manualmente.');
           if (pf.items.length && !confirm('Esto reemplaza las líneas actuales por los costos de las ofertas aceptadas y el flete contratado. ¿Continuar?')) return;
           pf.items = d.items; drawRows(); App.toast('Costos cargados');
-        } }), el('button', { class: 'btn ghost small', type: 'button', text: '+ Línea', onclick: () => { pf.items.push({ descripcion: '', cantidad: 1, costo_unit: 0, utilidad_pct: Number(util.value) || 0 }); drawRows(); } }),
+        } }), el('button', { class: 'btn ghost small', type: 'button', text: '+ Línea libre', onclick: () => { pf.items.push({ descripcion: '', unidad: 'und', cantidad: 1, costo_unit: 0, utilidad_pct: Number(util.value) || 0 }); drawRows(); } }),
+          el('button', { class: 'btn ghost small', type: 'button', text: '+ Del catálogo', onclick: () => App.formDialog({ title: 'Agregar producto del catálogo', submitLabel: 'Agregar', values: { cantidad: 1 },
+            fields: [{ k: 'producto', label: 'Producto', type: 'select', required: true, options: (App.cache.productos || []).filter((p) => p.activo).map((p) => [p.id, p.nombre]) }, { k: 'cantidad', label: 'Cantidad', type: 'number', required: true }],
+            onSubmit: async (v) => { const p = App.cache.productos.find((x) => x.id === v.producto); pf.items.push({ descripcion: p.nombre, unidad: p.unidad, cantidad: v.cantidad, costo_unit: Number(p.costo_ref) || 0, utilidad_pct: Number(util.value) || 0 }); drawRows(); } }) }),
+          el('button', { class: 'btn ghost small', type: 'button', text: 'Cargar desde las partidas de la solicitud', onclick: () => {
+            if (!(r.items || []).length) return App.toast('La solicitud no tiene partidas. Agrégalas o impórtalas en la pestaña Resumen.');
+            r.items.forEach((i) => { const p = (App.cache.productos || []).find((x) => x.id === i.producto_id); pf.items.push({ descripcion: i.descripcion, unidad: i.unidad, cantidad: i.cantidad, costo_unit: p ? Number(p.costo_ref) || 0 : 0, utilidad_pct: Number(util.value) || 0 }); });
+            drawRows(); App.toast('Partidas cargadas: completa los costos unitarios');
+          } }),
           el('span', { class: 'sub', text: 'Utilidad global %:' }), util, el('button', { class: 'btn ghost small', type: 'button', text: 'Aplicar a todas', onclick: () => { pf.items.forEach((i) => (i.utilidad_pct = Number(util.value) || 0)); drawRows(); } })),
-        el('div', { class: 'table-wrap' }, el('table', { class: 'lines' }, el('thead', {}, el('tr', {}, ...['Descripción', 'Cant.', 'Costo unit.', 'Utilidad %', 'Precio unit.', 'Total venta', ''].map((h, i) => el('th', { class: i > 3 && i < 6 ? 'num' : '', text: h })))), tbody)),
+        el('div', { class: 'table-wrap' }, el('table', { class: 'lines' }, el('thead', {}, el('tr', {}, ...['Descripción', 'Cant.', 'Und.', 'Costo unit.', 'Utilidad %', 'Precio unit.', 'Total venta', ''].map((h, i) => el('th', { class: i > 4 && i < 7 ? 'num' : '', text: h })))), tbody)),
         el('div', { class: 'grid4', style: 'margin-top:.7rem' }, field('Moneda', money), field('Impuesto', itbms), field('Validez (días)', valid), field('Condiciones de pago', cond)), field('Observaciones para el cliente', nota), totals),
       el('div', { class: 'box' }, el('div', { class: 'actions' },
         !locked && el('button', { class: 'btn', type: 'button', text: pf.id ? 'Guardar cambios' : 'Guardar proforma', onclick: () => guarded(() => save().then((s) => { s && App.toast('Proforma guardada: ' + s.numero); return s; })) }),

@@ -107,3 +107,10 @@ dt { color: var(--muted); } dd { margin: 0; word-break: break-word; white-space:
 .lines { min-width: 760px; }
 .toast { position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%); background: var(--text); color: var(--bg); padding: .6rem 1rem; border-radius: 8px; z-index: 50; max-width: 90vw; }
 textarea.mono { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: .82rem; min-height: 220px; }
+
+.itemrow { display: grid; grid-template-columns: .55fr 1.2fr 2fr .6fr .6fr auto; gap: .4rem; margin-bottom: .4rem; align-items: center; }
+@media (max-width: 700px) { .itemrow { grid-template-columns: 1fr 1fr; } }
+.doc-row { display: flex; flex-wrap: wrap; gap: .5rem; align-items: center; padding: .4rem 0; border-bottom: 1px solid var(--line); font-size: .88rem; }
+.doc-row:last-child { border-bottom: 0; } .doc-row .grow { flex: 1; min-width: 160px; }
+.upload-bar { display: flex; flex-wrap: wrap; gap: .5rem; align-items: center; margin-top: .6rem; } .upload-bar select, .upload-bar input[type=text] { width: auto; }
+#modal2 { z-index: 40; }
