@@ -1,0 +1,492 @@
+/* Vista: Pipeline de solicitudes + detalle (resumen, proveedores, transporte, costeo/proforma, cobros y pagos). */
+(() => {
+  'use strict';
+  const { el } = App;
+
+  // ---------- helpers de UI ----------
+  const field = (label, input, hint) => el('div', { class: 'field' }, el('label', { text: label }), input, hint ? el('div', { class: 'hint', text: hint }) : null);
+  const numInput = (v, props = {}) => el('input', { type: 'number', step: 'any', min: '0', value: v ?? '', ...props });
+  const sel = (options, value, props = {}) => {
+    const s = el('select', props, ...options.map((o) => el('option', { value: o[0], text: o[1] })));
+    s.value = value ?? ''; return s;
+  };
+  const incoOpts = App.INCOTERMS.map((i) => [i, i]);
+  const sig = () => {
+    const b = App.brand || {};
+    return [b.contact && b.name ? `${b.contact} — ${b.name}` : b.contact || b.name, b.phone, b.email].filter(Boolean).join('\n');
+  };
+  const setStage = async (D, estado) => {
+    await App.patch('cotizaciones', D.r.id, { estado }); D.r.estado = estado;
+  };
+
+  // ---------- resumen y mensajes ----------
+  function summaryText(r, withClient) {
+    const L = []; const line = (l, v) => v && L.push(`${l}: ${v}`);
+    L.push(`SOLICITUD DE COTIZACIÓN ${App.folio(r)}`); line('Fecha', App.fmtDay(r.created_at.slice(0, 10)));
+    if (withClient) { L.push('', 'CLIENTE'); line('Nombre', r.nombre); line('Empresa', r.empresa); line('Correo', r.correo); line('Teléfono', r.telefono || r.contacto_info); }
+    L.push('', 'ESPECIFICACIONES');
+    line('Nivel de tensión', r.tension); line('Tipo de requerimiento', r.requerimiento); line('Cambio de dirección', r.cambio_direccion);
+    line('Longitud aproximada', r.longitud); line('Terreno', r.terreno); line('Cantidad de estructuras', r.cant_estructuras);
+    line('Ángulos horizontales', r.angulo_horizontal); line('Desnivel vertical', r.desnivel_vertical); line('Conductor', r.conductor);
+    line('Entrega estimada', r.fecha_entrega ? App.fmtDay(r.fecha_entrega) : null);
+    if (r.partidas) L.push('', 'PARTIDAS SOLICITADAS', r.partidas);
+    if (r.descripcion) L.push('', 'DESCRIPCIÓN', r.descripcion);
+    const n = (r.archivos || []).length; if (n) L.push('', `Documentos técnicos: ${n} archivo(s), se enviarán por separado.`);
+    return L.join('\n');
+  }
+  function suggestEsp(r) {
+    const t = [r.partidas, r.descripcion, r.conductor].join(' ').toLowerCase(); const out = new Set();
+    [['conductores', /acsr|aaac|acss|conductor|cable|guarda/], ['estructuras', /torre|poste|cruceta|estructura|stub|anclaje|celos/],
+      ['aislamiento', /aislador|herraje|grapa|cadena|retenida|yugo/], ['proteccion', /apartarrayo|tierra|cortacircuito|seccionador|fusible|amortiguador|protecc|reconectador/],
+      ['opgw', /opgw|fibra/], ['tendido', /tendido|accesorios/]].forEach(([k, re]) => re.test(t) && out.add(k));
+    return out;
+  }
+  const provMessage = (r, p) =>
+    `Estimados ${p ? p.contacto || p.nombre : 'proveedores'}:\n\nSolicitamos cotización para el siguiente suministro:\n\n${summaryText(r, false)}\n\nFavor indicar: precio unitario y total, Incoterm (EXW/FOB y puerto de embarque), plazo de entrega, condiciones de pago, validez de la oferta y fichas técnicas.\n\nSaludos cordiales,\n${sig()}`;
+  function fleteMessage(r, t, f) {
+    const L = [`Estimados ${t ? t.contacto || t.nombre : 'transportistas'}:`, '', `Solicitamos cotización de flete para el siguiente embarque (ref. ${App.folio(r)}):`, ''];
+    const line = (l, v) => v !== null && v !== undefined && v !== '' && L.push(`• ${l}: ${v}`);
+    line('Modalidad', App.label(App.MODALIDADES, f.modalidad)); line('Origen', f.origen); line('Destino', f.destino);
+    line('Peso aproximado', f.peso_kg ? `${f.peso_kg} kg` : null); line('Volumen', f.volumen_m3 ? `${f.volumen_m3} m³` : null); line('Bultos', f.bultos);
+    line('Valor de la mercancía (FOB)', f.valor_fob_usd ? App.money(f.valor_fob_usd) : null);
+    line('Carga', `Materiales para línea eléctrica de ${r.tension}${r.partidas ? ' — ' + r.partidas : ''}`);
+    L.push('', `Favor cotizar de forma desglosada para condiciones ${f.incoterm || 'FOB'} y CIF: flete, seguro, gastos en origen, gastos en destino, tiempo de tránsito y validez de la oferta.`, '', 'Saludos cordiales,', sig());
+    return L.join('\n');
+  }
+  async function signedLinks(archivos, into) {
+    for (const f of archivos || []) {
+      try {
+        const s = await App.api(`/storage/v1/object/sign/adjuntos/${f.path.split('/').map(encodeURIComponent).join('/')}`, { method: 'POST', body: JSON.stringify({ expiresIn: 600 }) });
+        into.append(el('div', {}, el('a', { href: `${App.SUPABASE_URL}/storage/v1${s.signedURL}`, target: '_blank', rel: 'noopener', text: `${f.nombre} (${Math.max(1, Math.round(f.bytes / 1024))} KB)` })));
+      } catch (_) { into.append(el('div', { text: `${f.nombre} (no disponible)` })); }
+    }
+  }
+
+  // ---------- cálculos ----------
+  const unitPrice = (i) => App.r2((Number(i.costo_unit) || 0) * (1 + (Number(i.utilidad_pct) || 0) / 100));
+  const lineTotal = (i) => App.r2((Number(i.cantidad) || 0) * unitPrice(i));
+  function pfCalc(items, itbmsPct) {
+    const costo = App.r2(items.reduce((s, i) => s + (Number(i.cantidad) || 0) * (Number(i.costo_unit) || 0), 0));
+    const subtotal = App.r2(items.reduce((s, i) => s + lineTotal(i), 0));
+    const itbms = App.r2((subtotal * (Number(itbmsPct) || 0)) / 100);
+    const utilidad = App.r2(subtotal - costo);
+    return { costo, subtotal, itbms, total: App.r2(subtotal + itbms), utilidad, margen: subtotal ? (utilidad / subtotal) * 100 : 0, markup: costo ? (utilidad / costo) * 100 : 0 };
+  }
+  const fleteCalc = (f) => {
+    const fob = App.r2((Number(f.valor_fob_usd) || 0) + (Number(f.gastos_origen_usd) || 0));
+    const cfr = App.r2(fob + (Number(f.flete_usd) || 0));
+    const cif = App.r2(cfr + (Number(f.seguro_usd) || 0));
+    return { fob, cfr, cif, destino: App.r2(cif + (Number(f.gastos_destino_usd) || 0)) };
+  };
+  const fleteCost = (f) => App.r2((Number(f.flete_usd) || 0) + (Number(f.seguro_usd) || 0) + (Number(f.gastos_origen_usd) || 0) + (Number(f.gastos_destino_usd) || 0));
+
+  // ============ VISTA PIPELINE ============
+  const S = { rows: [], view: 'tablero' };
+
+  App.register('solicitudes', 'Pipeline', {
+    async render(main) {
+      const q = el('input', { class: 'grow', type: 'search', placeholder: 'Buscar por cliente, empresa, correo, folio…' });
+      const fTipo = sel([['', 'Todos los tipos'], ['tecnica', 'Técnica'], ['contacto', 'Contacto']], '');
+      const fEtapa = sel([['', 'Todas las etapas'], ...App.SOL_ETAPAS], '');
+      const seg = el('div', { class: 'seg' }, el('button', { type: 'button', 'data-v': 'tablero', text: 'Tablero' }), el('button', { type: 'button', 'data-v': 'lista', text: 'Lista' }));
+      const stats = el('div', { class: 'stats' }); const body = el('div');
+      main.replaceChildren(stats, el('div', { class: 'toolbar' }, seg, q, fTipo, fEtapa, el('button', { class: 'btn ghost', type: 'button', text: 'Exportar CSV', onclick: exportCsv })), body);
+
+      const filtered = () => {
+        const t = q.value.trim().toLowerCase();
+        return S.rows.filter((r) => (!fTipo.value || r.tipo === fTipo.value) && (!fEtapa.value || r.estado === fEtapa.value) &&
+          (!t || [r.nombre, r.empresa, r.correo, r.telefono, r.contacto_info, r.descripcion, r.partidas, App.folio(r), r.clientes && r.clientes.nombre].some((v) => (v || '').toLowerCase().includes(t))));
+      };
+      function exportCsv() {
+        const rows = filtered().map((r) => ({ folio: App.folio(r), ...r }));
+        App.download('solicitudes.csv', App.csv(['folio', 'created_at', 'estado', 'tipo', 'nombre', 'empresa', 'correo', 'telefono', 'contacto_info', 'tension', 'requerimiento', 'cambio_direccion', 'longitud', 'terreno', 'cant_estructuras', 'conductor', 'fecha_entrega', 'partidas', 'descripcion', 'notas'], rows));
+      }
+      const card = (r) => el('div', { class: 'card', onclick: () => App.openSolicitud(r.id) },
+        el('b', { text: r.nombre }), r.empresa ? el('div', { class: 'meta', text: r.empresa }) : null,
+        el('div', { class: 'meta', text: `${r.tension} · ${r.tipo === 'tecnica' ? 'Técnica' : 'Contacto'}` }),
+        el('div', { class: 'meta', text: `${App.folio(r)} · ${App.fmtDate(r.created_at)}` }),
+        r.clientes ? App.badge('Cliente: ' + r.clientes.nombre, 'info') : null, (r.archivos || []).length ? App.badge('📎 ' + r.archivos.length) : null);
+
+      function draw() {
+        const all = S.rows, n = (...e) => all.filter((r) => e.includes(r.estado)).length;
+        stats.replaceChildren(
+          ...[['Total', all.length, ''], ['Nuevas (sin atender)', n('nueva'), n('nueva') ? 'neg' : ''], ['En proceso', n('en_revision', 'cotizando', 'proforma_enviada', 'negociacion'), ''],
+            ['Ganadas / en ejecución', n('ganada', 'en_compra', 'en_transito', 'entregada'), 'pos'], ['Perdidas', n('perdida'), '']]
+            .map(([l, v, k]) => el('div', { class: 'stat ' + k }, el('b', { text: v }), el('span', { text: l }))));
+        [...seg.children].forEach((b) => b.classList.toggle('active', b.dataset.v === S.view));
+        const rows = filtered();
+        if (S.view === 'tablero') {
+          body.replaceChildren(App.board({
+            stages: App.SOL_ETAPAS, items: rows, getStage: (r) => r.estado, cardFn: card,
+            onMove: (r, estado) => App.guard(async () => { await App.patch('cotizaciones', r.id, { estado }); r.estado = estado; draw(); App.toast(`Movida a “${App.label(App.SOL_ETAPAS, estado)}”`); })
+          }));
+        } else if (!rows.length) body.replaceChildren(el('div', { class: 'empty', text: 'No hay solicitudes con ese filtro.' }));
+        else body.replaceChildren(el('div', { class: 'table-wrap' }, el('table', {},
+          el('thead', {}, el('tr', {}, ...['Fecha', 'Folio', 'Cliente', 'Tipo', 'Tensión', 'Archivos', 'Etapa'].map((h) => el('th', { text: h })))),
+          el('tbody', {}, rows.map((r) => el('tr', { class: 'click', onclick: () => App.openSolicitud(r.id) },
+            el('td', { text: App.fmtDate(r.created_at) }), el('td', { text: App.folio(r) }), el('td', {}, el('b', { text: r.nombre }), r.empresa ? el('div', { class: 'sub', text: r.empresa }) : null),
+            el('td', { text: r.tipo === 'tecnica' ? 'Técnica' : 'Contacto' }), el('td', { text: r.tension }), el('td', { text: (r.archivos || []).length || '—' }), el('td', {}, App.stageBadge(r.estado))))))));
+      }
+      seg.addEventListener('click', (e) => { const v = e.target.dataset && e.target.dataset.v; if (v) { S.view = v; draw(); } });
+      [q, fTipo, fEtapa].forEach((x) => x.addEventListener('input', draw));
+      await App.guard(async () => {
+        S.rows = await App.get('cotizaciones', 'select=*,clientes(nombre)&order=created_at.desc&limit=1000'); draw();
+      });
+    }
+  });
+
+  // ============ DETALLE ============
+  App.openSolicitud = async (id, tab) => {
+    await App.guard(async () => {
+      await App.loadDirs(); if (!App.brand) await App.loadBrand();
+      const rr = await App.get('cotizaciones', `id=eq.${id}&select=*,clientes(nombre)`); const r = rr[0]; if (!r) return App.toast('Solicitud no encontrada');
+      const D = { r, tab: tab || 'resumen', espSel: suggestEsp(r), provChecked: new Set(), showAllProv: false, modSel: null, pf: null, includeClient: false };
+      await reloadDetail(D, true); renderDetail(D);
+    });
+  };
+
+  async function reloadDetail(D, first) {
+    const id = D.r.id;
+    const [rfqs, fletes, proformas, movs] = await Promise.all([
+      App.get('rfq_proveedor', `cotizacion_id=eq.${id}&select=*&order=created_at.asc`), App.get('cotizaciones_flete', `cotizacion_id=eq.${id}&select=*&order=created_at.asc`),
+      App.get('proformas', `cotizacion_id=eq.${id}&select=*&order=created_at.desc`), App.get('movimientos', `cotizacion_id=eq.${id}&select=*&order=fecha.desc`)
+    ]);
+    Object.assign(D, { rfqs, fletes, proformas, movs });
+    if (first) {
+      const best = rfqs.filter((x) => ['aceptada', 'ordenada', 'entregada'].includes(x.estado) && x.moneda === 'USD' && x.precio_total)[0];
+      D.flete = { modalidad: 'maritimo', incoterm: 'FOB', origen: '', destino: 'Panamá', peso_kg: null, volumen_m3: null, bultos: null, valor_fob_usd: best ? Number(best.precio_total) : null };
+      D.modSel = 'maritimo';
+    }
+    if (D.pf && D.pf.id) D.pf = proformas.find((p) => p.id === D.pf.id) || null;
+  }
+  const refresh = async (D) => App.guard(async () => { await reloadDetail(D); renderDetail(D); });
+
+  function renderDetail(D) {
+    const r = D.r; const top = App.$('panel').scrollTop;
+    const tabs = [['resumen', 'Resumen'], ['proveedores', `Proveedores (${D.rfqs.length})`], ['transporte', `Transporte (${D.fletes.length})`], ['costeo', 'Costeo y proforma'], ['cobros', 'Cobros y pagos']];
+    const stage = sel(App.SOL_ETAPAS, r.estado);
+    stage.addEventListener('change', () => App.guard(async () => { await setStage(D, stage.value); App.toast('Etapa actualizada'); renderDetail(D); }));
+    const body = { resumen: tabResumen, proveedores: tabProveedores, transporte: tabTransporte, costeo: tabCosteo, cobros: tabCobros }[D.tab](D);
+    App.openDrawer(el('div', {},
+      el('div', { class: 'panel-head' }, el('div', {}, el('h2', { text: r.nombre + (r.empresa ? ' · ' + r.empresa : '') }), el('div', { class: 'sub', text: `${App.folio(r)} · ${App.fmtDate(r.created_at)} · ${r.tipo === 'tecnica' ? 'Especificación técnica' : 'Contacto y cotización'}` })),
+        el('div', { class: 'actions' }, stage, el('button', { class: 'btn ghost small', type: 'button', text: 'Cerrar', onclick: App.closeDrawer }))),
+      el('div', { class: 'subtabs' }, tabs.map(([k, l]) => el('button', { type: 'button', class: D.tab === k ? 'active' : '', text: l, onclick: () => { D.tab = k; renderDetail(D); } }))), body));
+    App.$('panel').scrollTop = top;
+  }
+
+  // ---------- Pestaña: Resumen ----------
+  function tabResumen(D) {
+    const r = D.r; const dl = el('dl');
+    [['Correo', r.correo], ['Teléfono', r.telefono], ['Contacto', r.contacto_info], ['Nivel de tensión', r.tension], ['Requerimiento', r.requerimiento], ['Cambio de dirección', r.cambio_direccion],
+      ['Longitud', r.longitud], ['Terreno', r.terreno], ['Estructuras', r.cant_estructuras], ['Ángulo horizontal', r.angulo_horizontal], ['Desnivel vertical', r.desnivel_vertical],
+      ['Conductor', r.conductor], ['Entrega estimada', r.fecha_entrega && App.fmtDay(r.fecha_entrega)], ['Partidas', r.partidas], ['Descripción', r.descripcion]]
+      .forEach(([l, v]) => v && dl.append(el('dt', { text: l }), el('dd', { text: v })));
+    const phone = App.digits(r.telefono || r.contacto_info);
+    const mail = r.correo || ((r.contacto_info || '').match(/[^\s/]+@[^\s/]+\.[^\s/]+/) || [])[0];
+
+    // Cliente vinculado
+    const cli = el('div', { class: 'box' }, el('h3', { text: 'Cliente' }));
+    const link = (clienteId) => App.guard(async () => {
+      await App.patch('cotizaciones', D.r.id, { cliente_id: clienteId });
+      const c = App.cache.clientes.find((x) => x.id === clienteId); D.r.cliente_id = clienteId; D.r.clientes = c ? { nombre: c.nombre } : null; renderDetail(D);
+    });
+    if (r.cliente_id) {
+      cli.append(el('div', {}, el('a', { href: '#', text: r.clientes ? r.clientes.nombre : 'Ver cliente', onclick: (e) => { e.preventDefault(); App.closeDrawer(); App.openCliente(r.cliente_id); } })),
+        el('div', { class: 'actions' }, el('button', { class: 'btn ghost small', type: 'button', text: 'Desvincular', onclick: () => link(null) })));
+    } else {
+      const match = mail && App.cache.clientes.find((c) => (c.correo || '').toLowerCase() === mail.toLowerCase());
+      const pick = sel([['', 'Elegir cliente existente…'], ...App.cache.clientes.map((c) => [c.id, c.nombre + (c.empresa ? ' · ' + c.empresa : '')])], '');
+      cli.append(match ? el('div', { class: 'actions' }, el('span', { text: `Posible coincidencia por correo: ${match.nombre}` }), el('button', { class: 'btn small', type: 'button', text: 'Vincular', onclick: () => link(match.id) })) : null,
+        el('div', { class: 'actions' },
+          el('button', { class: 'btn small', type: 'button', text: '+ Crear cliente con estos datos', onclick: () => App.clienteForm({ nombre: r.nombre, empresa: r.empresa, correo: mail, telefono: r.telefono || r.contacto_info, activo: true }, (c) => link(c.id)) }),
+          pick, el('button', { class: 'btn ghost small', type: 'button', text: 'Vincular', onclick: () => pick.value && link(pick.value) })));
+    }
+
+    // Resumen para proveedores
+    const ta = el('textarea', { class: 'mono' }); const inc = el('input', { type: 'checkbox', checked: D.includeClient });
+    const fill = () => { ta.value = summaryText(r, inc.checked); }; inc.addEventListener('change', () => { D.includeClient = inc.checked; fill(); }); fill();
+    const resumen = el('div', { class: 'box' }, el('h3', { text: 'Resumen de lo solicitado (para pasar a proveedores)' }),
+      el('label', { class: 'check' }, inc, 'Incluir datos del cliente (por defecto NO se comparte la identidad del cliente con terceros)'), ta,
+      el('div', { class: 'actions' }, el('button', { class: 'btn small', type: 'button', text: 'Copiar', onclick: () => App.copy(ta.value) }),
+        el('button', { class: 'btn ghost small', type: 'button', text: 'Imprimir / PDF', onclick: () => App.printHtml(App.folio(r), `<h1>${App.esc(App.folio(r))}</h1><pre>${App.esc(ta.value)}</pre>`) })));
+
+    const notas = el('textarea', { placeholder: 'Notas internas (no las ve el cliente)', value: r.notas || '' });
+    const files = el('div'); signedLinks(r.archivos, files);
+    return el('div', {},
+      el('div', { class: 'box' }, dl, el('div', { class: 'actions' },
+        phone.length >= 7 && el('a', { class: 'btn wa small', target: '_blank', rel: 'noopener', href: App.waLink(phone, `Hola ${r.nombre}, recibimos su solicitud de cotización de línea ${r.tension}. `), text: 'WhatsApp' }),
+        mail && el('a', { class: 'btn mail small', href: `mailto:${mail}?subject=${encodeURIComponent('Su solicitud de cotización ' + r.tension)}`, text: 'Correo' }),
+        phone.length >= 7 && el('a', { class: 'btn ghost small', href: `tel:+${phone}`, text: 'Llamar' }))),
+      cli, resumen,
+      el('div', { class: 'box' }, el('h3', { text: 'Notas internas' }), notas, el('div', { class: 'actions' }, el('button', { class: 'btn small', type: 'button', text: 'Guardar notas', onclick: () => App.guard(async () => { await App.patch('cotizaciones', r.id, { notas: notas.value.trim() || null }); r.notas = notas.value.trim() || null; App.toast('Notas guardadas'); }) }))),
+      (r.archivos || []).length ? el('div', { class: 'box' }, el('h3', { text: 'Archivos adjuntos' }), files) : null);
+  }
+
+  // ---------- Pestaña: Proveedores ----------
+  async function registerRfq(D, p, via) {
+    if (D.rfqs.some((x) => x.proveedor_id === p.id)) return;
+    await App.guard(async () => {
+      D.rfqs.push(await App.insert('rfq_proveedor', { cotizacion_id: D.r.id, proveedor_id: p.id, via }));
+      if (['nueva', 'en_revision'].includes(D.r.estado)) await setStage(D, 'cotizando');
+      renderDetail(D);
+    });
+  }
+  function tabProveedores(D) {
+    const r = D.r;
+    const chips = el('div', { class: 'chips' }, App.ESPECIALIDADES.map(([k, l]) => el('span', { class: 'chip' + (D.espSel.has(k) ? ' on' : ''), text: l, onclick: (e) => { D.espSel.has(k) ? D.espSel.delete(k) : D.espSel.add(k); e.target.classList.toggle('on'); drawList(); } })));
+    const all = el('input', { type: 'checkbox', checked: D.showAllProv }); all.addEventListener('change', () => { D.showAllProv = all.checked; drawList(); });
+    const list = el('div'); const bulk = el('div', { class: 'actions' });
+    function drawList() {
+      const cands = App.cache.proveedores.filter((p) => p.activo && (D.showAllProv || D.espSel.size === 0 || (p.especialidades || []).some((e) => D.espSel.has(e))));
+      if (!cands.length) { list.replaceChildren(el('div', { class: 'empty', text: App.cache.proveedores.length ? 'Ningún proveedor activo coincide con esas especialidades.' : 'Aún no hay proveedores. Agrégalos en la pestaña “Proveedores” del menú.' })); }
+      else list.replaceChildren(...cands.map((p) => {
+        const sent = D.rfqs.find((x) => x.proveedor_id === p.id); const msg = provMessage(r, p);
+        const chk = el('input', { type: 'checkbox', checked: D.provChecked.has(p.id) }); chk.addEventListener('change', () => { chk.checked ? D.provChecked.add(p.id) : D.provChecked.delete(p.id); });
+        return el('div', { class: 'row-card' }, el('div', { class: 'head' }, el('label', { class: 'check' }, chk, el('b', { text: p.nombre })), sent ? App.stageBadge(sent.estado) : App.badge('sin enviar')),
+          el('div', { class: 'sub', text: [p.contacto, p.pais].filter(Boolean).join(' · ') }), el('div', {}, (p.especialidades || []).map((k) => App.badge(App.label(App.ESPECIALIDADES, k)))),
+          el('div', { class: 'actions' },
+            p.whatsapp && el('button', { class: 'btn wa small', type: 'button', text: 'WhatsApp', onclick: () => { App.openLink(App.waLink(p.whatsapp, msg)); registerRfq(D, p, 'whatsapp'); } }),
+            p.correo && el('button', { class: 'btn mail small', type: 'button', text: 'Correo', onclick: () => { App.openLink(App.mailLink(p.correo, `Solicitud de cotización ${App.folio(r)} — ${r.tension}`, msg)); registerRfq(D, p, 'correo'); } }),
+            el('button', { class: 'btn ghost small', type: 'button', text: 'Copiar mensaje', onclick: () => App.copy(msg) }),
+            !sent && el('button', { class: 'btn ghost small', type: 'button', text: 'Marcar como enviada', onclick: () => registerRfq(D, p, 'manual') })));
+      }));
+      bulk.replaceChildren(el('button', { class: 'btn mail small', type: 'button', text: 'Correo a seleccionados (CCO)', onclick: () => {
+        const ps = App.cache.proveedores.filter((p) => D.provChecked.has(p.id) && p.correo); if (!ps.length) return App.toast('Marca proveedores con correo');
+        App.openLink(App.mailLink('', `Solicitud de cotización ${App.folio(r)} — ${r.tension}`, provMessage(r, null), ps.map((p) => p.correo).join(',')));
+        ps.forEach((p) => registerRfq(D, p, 'correo'));
+      } }), el('button', { class: 'btn ghost small', type: 'button', text: 'Copiar mensaje general', onclick: () => App.copy(provMessage(r, null)) }));
+    }
+    drawList();
+
+    // Ofertas registradas
+    const priced = D.rfqs.filter((x) => ['respondida', 'negociacion', 'aceptada', 'ordenada', 'entregada'].includes(x.estado) && x.precio_total);
+    const best = priced.length ? priced.reduce((a, b) => (Number(b.precio_total) < Number(a.precio_total) && b.moneda === a.moneda ? b : a)) : null;
+    const cards = D.rfqs.map((x) => {
+      const p = App.cache.proveedores.find((y) => y.id === x.proveedor_id) || { nombre: 'Proveedor' };
+      const est = sel(App.OFERTA_ETAPAS, x.estado), precio = numInput(x.precio_total), mon = sel([['USD', 'USD'], ['PAB', 'PAB'], ['EUR', 'EUR'], ['CNY', 'CNY'], ['MXN', 'MXN'], ['COP', 'COP']], x.moneda);
+      const inco = sel([['', '—'], ...incoOpts], x.incoterm), plazo = numInput(x.plazo_dias, { step: '1' }), nota = el('input', { value: x.notas || '', placeholder: 'Condiciones, validez, observaciones…' });
+      return el('div', { class: 'row-card' + (best && best.id === x.id && priced.length > 1 ? ' best' : '') },
+        el('div', { class: 'head' }, el('b', { text: p.nombre }), el('div', {}, best && best.id === x.id && priced.length > 1 ? App.badge('Mejor precio', 'ok') : null, App.badge('vía ' + x.via))),
+        el('div', { class: 'grid4' }, field('Estado', est), field('Precio total', precio), field('Moneda', mon), field('Incoterm', inco), field('Plazo (días)', plazo), el('div', { class: 'field full', style: 'grid-column:span 3' }, el('label', { text: 'Notas' }), nota)),
+        el('div', { class: 'actions' },
+          el('button', { class: 'btn small', type: 'button', text: 'Guardar', onclick: () => App.guard(async () => {
+            const b = { estado: est.value, precio_total: App.num(precio.value), moneda: mon.value, incoterm: inco.value || null, plazo_dias: App.num(plazo.value), notas: nota.value.trim() || null };
+            if (b.estado !== 'enviada' && !x.respondida_at) b.respondida_at = new Date().toISOString();
+            Object.assign(x, await App.patch('rfq_proveedor', x.id, b)); App.toast('Oferta guardada'); renderDetail(D);
+          }) }),
+          el('button', { class: 'btn ghost small', type: 'button', text: 'Quitar', onclick: () => confirm('¿Quitar esta solicitud al proveedor?') && App.guard(async () => { await App.del('rfq_proveedor', x.id); D.rfqs = D.rfqs.filter((y) => y.id !== x.id); renderDetail(D); }) })));
+    });
+    return el('div', {},
+      el('div', { class: 'box' }, el('h3', { text: 'Enviar solicitud de cotización a proveedores' }), el('p', { class: 'sub', text: 'El mensaje incluye el resumen técnico SIN datos del cliente. Se abre WhatsApp o el correo con el texto listo y el envío queda registrado.' }),
+        el('div', { class: 'sub', text: 'Especialidades (sugeridas según lo solicitado):' }), chips, el('label', { class: 'check' }, all, 'Mostrar todos los proveedores activos'), bulk, list),
+      el('div', { class: 'box' }, el('h3', { text: 'Ofertas y respuestas' }), D.rfqs.length ? cards : el('div', { class: 'empty', text: 'Aún no has enviado solicitudes a proveedores.' })));
+  }
+
+  // ---------- Pestaña: Transporte ----------
+  function tabTransporte(D) {
+    const r = D.r, F = D.flete;
+    if (F.valor_fob_usd === null) {
+      const acc = D.rfqs.find((x) => ['aceptada', 'ordenada', 'entregada'].includes(x.estado) && x.moneda === 'USD' && x.precio_total);
+      if (acc) F.valor_fob_usd = Number(acc.precio_total);
+    }
+    const ins = {
+      modalidad: sel(App.MODALIDADES, F.modalidad), incoterm: sel(incoOpts, F.incoterm), origen: el('input', { value: F.origen, placeholder: 'Ej. Shanghái, China' }), destino: el('input', { value: F.destino }),
+      peso_kg: numInput(F.peso_kg), volumen_m3: numInput(F.volumen_m3), bultos: numInput(F.bultos, { step: '1' }), valor_fob_usd: numInput(F.valor_fob_usd)
+    };
+    Object.entries(ins).forEach(([k, i]) => i.addEventListener('input', () => {
+      F[k] = ['peso_kg', 'volumen_m3', 'bultos', 'valor_fob_usd'].includes(k) ? App.num(i.value) : i.value.trim();
+      if (k === 'modalidad') { D.modSel = i.value; drawList(); }
+    }));
+    const list = el('div');
+    function drawList() {
+      const cands = App.cache.transportistas.filter((t) => t.activo && (!D.modSel || (t.modalidades || []).includes(D.modSel)));
+      if (!cands.length) return list.replaceChildren(el('div', { class: 'empty', text: App.cache.transportistas.length ? 'Ningún transportista activo cubre esa modalidad.' : 'Aún no hay transportistas. Agrégalos en la pestaña “Transportistas” del menú.' }));
+      list.replaceChildren(...cands.map((t) => {
+        const sent = D.fletes.find((x) => x.transportista_id === t.id); const msg = () => fleteMessage(r, t, F);
+        const go = (via) => {
+          if (!F.origen || !F.destino) return App.toast('Indica origen y destino antes de enviar');
+          const text = msg();
+          App.openLink(via === 'whatsapp' ? App.waLink(t.whatsapp, text) : App.mailLink(t.correo, `Cotización de flete ${App.folio(r)} — ${App.label(App.MODALIDADES, F.modalidad)}`, text));
+          register(t, via);
+        };
+        return el('div', { class: 'row-card' }, el('div', { class: 'head' }, el('b', { text: t.nombre }), sent ? App.stageBadge(sent.estado) : App.badge('sin enviar')),
+          el('div', { class: 'sub', text: [t.contacto, t.pais, t.cobertura].filter(Boolean).join(' · ') }), el('div', {}, (t.modalidades || []).map((k) => App.badge(App.label(App.MODALIDADES, k)))),
+          el('div', { class: 'actions' }, t.whatsapp && el('button', { class: 'btn wa small', type: 'button', text: 'WhatsApp', onclick: () => go('whatsapp') }), t.correo && el('button', { class: 'btn mail small', type: 'button', text: 'Correo', onclick: () => go('correo') }),
+            el('button', { class: 'btn ghost small', type: 'button', text: 'Copiar mensaje', onclick: () => (F.origen && F.destino ? App.copy(msg()) : App.toast('Indica origen y destino')) }),
+            !sent && el('button', { class: 'btn ghost small', type: 'button', text: 'Marcar como enviada', onclick: () => (F.origen && F.destino ? register(t, 'manual') : App.toast('Indica origen y destino')) })));
+      }));
+    }
+    async function register(t, via) {
+      if (D.fletes.some((x) => x.transportista_id === t.id)) return;
+      await App.guard(async () => {
+        D.fletes.push(await App.insert('cotizaciones_flete', { cotizacion_id: r.id, transportista_id: t.id, via, ...F }));
+        if (['nueva', 'en_revision'].includes(r.estado)) await setStage(D, 'cotizando'); renderDetail(D);
+      });
+    }
+    drawList();
+
+    const priced = D.fletes.filter((x) => ['respondida', 'contratada'].includes(x.estado) && Number(x.flete_usd) > 0);
+    const best = priced.length ? priced.reduce((a, b) => (fleteCalc(b).destino < fleteCalc(a).destino ? b : a)) : null;
+    const cards = D.fletes.map((x) => {
+      const t = App.cache.transportistas.find((y) => y.id === x.transportista_id) || { nombre: 'Transportista' };
+      const est = sel(App.FLETE_ESTADOS, x.estado), n = {};
+      ['valor_fob_usd', 'gastos_origen_usd', 'flete_usd', 'seguro_usd', 'gastos_destino_usd'].forEach((k) => (n[k] = numInput(x[k])));
+      n.transito_dias = numInput(x.transito_dias, { step: '1' }); n.validez_dias = numInput(x.validez_dias, { step: '1' });
+      const nota = el('input', { value: x.notas || '', placeholder: 'Naviera, ruta, free time, observaciones…' });
+      const calc = el('div', { class: 'calc' });
+      const upd = () => {
+        const c = fleteCalc(Object.fromEntries(['valor_fob_usd', 'gastos_origen_usd', 'flete_usd', 'seguro_usd', 'gastos_destino_usd'].map((k) => [k, App.num(n[k].value)])));
+        calc.replaceChildren(...[['FOB (mercancía + gastos origen)', c.fob], ['CFR (FOB + flete)', c.cfr], ['CIF (CFR + seguro)', c.cif]].map(([l, v]) => el('div', {}, el('span', { text: l }), el('span', { text: App.money(v) }))),
+          el('div', { class: 'total' }, el('span', { text: 'Puesto en destino (CIF + gastos destino)' }), el('span', { text: App.money(c.destino) })));
+      };
+      Object.values(n).forEach((i) => i.addEventListener('input', upd)); upd();
+      return el('div', { class: 'row-card' + (best && best.id === x.id && priced.length > 1 ? ' best' : '') },
+        el('div', { class: 'head' }, el('b', { text: `${t.nombre} · ${App.label(App.MODALIDADES, x.modalidad)} · ${x.incoterm || ''}` }), el('div', {}, best && best.id === x.id && priced.length > 1 ? App.badge('Menor costo en destino', 'ok') : null)),
+        el('div', { class: 'sub', text: `${x.origen || '?'} → ${x.destino || '?'}${x.peso_kg ? ' · ' + x.peso_kg + ' kg' : ''}${x.volumen_m3 ? ' · ' + x.volumen_m3 + ' m³' : ''}${x.bultos ? ' · ' + x.bultos + ' bultos' : ''}` }),
+        el('div', { class: 'grid3' }, field('Estado', est), field('Valor mercancía FOB (USD)', n.valor_fob_usd), field('Gastos en origen (USD)', n.gastos_origen_usd), field('Flete (USD)', n.flete_usd),
+          field('Seguro (USD)', n.seguro_usd, 'Típico: 0.3–0.7 % del valor CIF'), field('Gastos en destino (USD)', n.gastos_destino_usd), field('Tránsito (días)', n.transito_dias), field('Validez (días)', n.validez_dias), el('div', { class: 'field' }, el('label', { text: 'Notas' }), nota)),
+        calc, el('div', { class: 'actions' },
+          el('button', { class: 'btn small', type: 'button', text: 'Guardar', onclick: () => App.guard(async () => {
+            const b = { estado: est.value, notas: nota.value.trim() || null }; Object.entries(n).forEach(([k, i]) => (b[k] = App.num(i.value)));
+            if (b.estado !== 'enviada' && !x.respondida_at) b.respondida_at = new Date().toISOString();
+            Object.assign(x, await App.patch('cotizaciones_flete', x.id, b)); App.toast('Cotización de flete guardada'); renderDetail(D);
+          }) }),
+          el('button', { class: 'btn ghost small', type: 'button', text: 'Quitar', onclick: () => confirm('¿Quitar esta cotización de flete?') && App.guard(async () => { await App.del('cotizaciones_flete', x.id); D.fletes = D.fletes.filter((y) => y.id !== x.id); renderDetail(D); }) })));
+    });
+    return el('div', {},
+      el('div', { class: 'box' }, el('h3', { text: 'Datos del embarque a cotizar' }), el('p', { class: 'sub', text: 'Estos datos van en el mensaje al transportista, que cotizará flete, seguro y gastos para condiciones FOB y CIF.' }),
+        el('div', { class: 'grid4' }, field('Modalidad', ins.modalidad), field('Incoterm de referencia', ins.incoterm), field('Origen', ins.origen), field('Destino', ins.destino),
+          field('Peso (kg)', ins.peso_kg), field('Volumen (m³)', ins.volumen_m3), field('Bultos', ins.bultos), field('Valor FOB (USD)', ins.valor_fob_usd))),
+      el('div', { class: 'box' }, el('h3', { text: 'Enviar a transportistas' }), list),
+      el('div', { class: 'box' }, el('h3', { text: 'Cotizaciones de flete recibidas' }), D.fletes.length ? cards : el('div', { class: 'empty', text: 'Aún no has pedido cotizaciones de flete.' })));
+  }
+
+  // ---------- Pestaña: Costeo y proforma ----------
+  function newDraft(D) {
+    const items = [];
+    D.rfqs.filter((x) => ['aceptada', 'ordenada', 'entregada'].includes(x.estado) && x.precio_total).forEach((x) => {
+      const p = App.cache.proveedores.find((y) => y.id === x.proveedor_id);
+      items.push({ descripcion: `Suministro de materiales — línea ${D.r.tension}${p ? ' (' + p.nombre + ')' : ''}`, cantidad: 1, costo_unit: Number(x.precio_total), utilidad_pct: 20 });
+    });
+    D.fletes.filter((x) => x.estado === 'contratada').forEach((x) => {
+      const t = App.cache.transportistas.find((y) => y.id === x.transportista_id);
+      items.push({ descripcion: `Flete y seguro (${App.label(App.MODALIDADES, x.modalidad)}${t ? ', ' + t.nombre : ''})`, cantidad: 1, costo_unit: fleteCost(x), utilidad_pct: 10 });
+    });
+    return { items, validez_dias: 15, condiciones_pago: '50% de anticipo y 50% contra entrega.', notas_cliente: '', itbms_pct: 0, moneda: 'USD', estado: 'borrador' };
+  }
+  const cliInfo = (D) => {
+    const c = D.r.cliente_id && App.cache.clientes.find((x) => x.id === D.r.cliente_id); const r = D.r;
+    const mail = (c && c.correo) || r.correo || ((r.contacto_info || '').match(/[^\s/]+@[^\s/]+\.[^\s/]+/) || [])[0];
+    return { nombre: (c && c.nombre) || r.nombre, empresa: (c && c.empresa) || r.empresa, ruc: c && c.ruc, correo: mail, tel: App.digits((c && c.telefono) || r.telefono || r.contacto_info), direccion: c && c.direccion };
+  };
+  function pfMessage(D, pf) {
+    const c = cliInfo(D); const k = pfCalc(pf.items, pf.itbms_pct);
+    return [`Estimado ${c.nombre}:`, '', `Le enviamos la proforma ${pf.numero} correspondiente a su solicitud ${App.folio(D.r)}.`, '',
+      ...pf.items.map((i) => `• ${i.descripcion} — ${i.cantidad} x ${App.money(unitPrice(i), pf.moneda)} = ${App.money(lineTotal(i), pf.moneda)}`), '',
+      `Subtotal: ${App.money(k.subtotal, pf.moneda)}`, pf.itbms_pct > 0 ? `ITBMS (${pf.itbms_pct}%): ${App.money(k.itbms, pf.moneda)}` : null, `TOTAL: ${App.money(k.total, pf.moneda)}`, '',
+      `Validez de la oferta: ${pf.validez_dias} días.`, pf.condiciones_pago ? `Condiciones de pago: ${pf.condiciones_pago}` : null, pf.notas_cliente || null, '', 'Quedamos atentos a sus comentarios.', sig()].filter((x) => x !== null).join('\n');
+  }
+  function pfHtml(D, pf) {
+    const b = App.brand || {}; const c = cliInfo(D); const k = pfCalc(pf.items, pf.itbms_pct); const e = App.esc;
+    const created = new Date(pf.created_at || Date.now()); const until = new Date(created.getTime() + pf.validez_dias * 86400000);
+    return `<div class="head"><div><h1>${e(b.name)}</h1><div class="muted">${e(b.address)}<br>${e(b.phone)} · ${e(b.email)}</div></div>
+      <div style="text-align:right"><h1>PROFORMA</h1><div><b>${e(pf.numero || 'BORRADOR')}</b></div><div class="muted">Fecha: ${created.toLocaleDateString('es-PA')}<br>Válida hasta: ${until.toLocaleDateString('es-PA')}</div></div></div>
+      <h2>Cliente</h2><div>${e(c.nombre)}${c.empresa ? ' — ' + e(c.empresa) : ''}${c.ruc ? '<br>RUC: ' + e(c.ruc) : ''}${c.correo ? '<br>' + e(c.correo) : ''}${c.direccion ? '<br>' + e(c.direccion) : ''}</div>
+      <div class="muted">Ref. solicitud ${e(App.folio(D.r))} — Línea eléctrica ${e(D.r.tension)}</div>
+      <table><thead><tr><th>Descripción</th><th class="r">Cant.</th><th class="r">Precio unit.</th><th class="r">Total</th></tr></thead><tbody>
+      ${pf.items.map((i) => `<tr><td>${e(i.descripcion)}</td><td class="r">${e(i.cantidad)}</td><td class="r">${e(App.money(unitPrice(i), pf.moneda))}</td><td class="r">${e(App.money(lineTotal(i), pf.moneda))}</td></tr>`).join('')}
+      </tbody><tfoot><tr><td colspan="3" class="r">Subtotal</td><td class="r">${e(App.money(k.subtotal, pf.moneda))}</td></tr>
+      ${pf.itbms_pct > 0 ? `<tr><td colspan="3" class="r">ITBMS (${e(pf.itbms_pct)}%)</td><td class="r">${e(App.money(k.itbms, pf.moneda))}</td></tr>` : ''}
+      <tr class="tot"><td colspan="3" class="r">TOTAL</td><td class="r">${e(App.money(k.total, pf.moneda))}</td></tr></tfoot></table>
+      ${pf.condiciones_pago ? `<h2>Condiciones de pago</h2><div>${e(pf.condiciones_pago)}</div>` : ''}${pf.notas_cliente ? `<h2>Observaciones</h2><pre>${e(pf.notas_cliente)}</pre>` : ''}
+      <p class="muted">Oferta válida por ${e(pf.validez_dias)} días desde la fecha de emisión. Precios sujetos a disponibilidad.</p>`;
+  }
+
+  function tabCosteo(D) {
+    const r = D.r;
+    if (!D.pf) D.pf = D.proformas[0] ? { ...D.proformas[0] } : newDraft(D);
+    const pf = D.pf; pf.items = (pf.items || []).map((i) => ({ ...i }));
+    const locked = pf.estado === 'aceptada';
+    const selector = el('div', { class: 'chips' },
+      ...D.proformas.map((p) => el('span', { class: 'chip' + (pf.id === p.id ? ' on' : ''), text: `${p.numero} · ${App.label(App.PROFORMA_ESTADOS, p.estado)}`, onclick: () => { D.pf = { ...p }; renderDetail(D); } })),
+      el('span', { class: 'chip' + (!pf.id ? ' on' : ''), text: '+ Nueva proforma', onclick: () => { D.pf = newDraft(D); renderDetail(D); } }));
+
+    const tbody = el('tbody'); const totals = el('div', { class: 'calc' });
+    const itbms = sel([['0', 'Sin ITBMS'], ['7', 'ITBMS 7 %']], String(Number(pf.itbms_pct) || 0), { disabled: locked });
+    function recalc() {
+      pf.itbms_pct = Number(itbms.value); const k = pfCalc(pf.items, pf.itbms_pct);
+      [...tbody.children].forEach((tr, idx) => { tr.querySelector('.pu').textContent = App.money(unitPrice(pf.items[idx])); tr.querySelector('.lt').textContent = App.money(lineTotal(pf.items[idx])); });
+      const row = (l, v, cls) => el('div', { class: cls || '' }, el('span', { text: l }), el('span', { text: v }));
+      totals.replaceChildren(row('Costo total', App.money(k.costo, pf.moneda)), row('Utilidad', `${App.money(k.utilidad, pf.moneda)} (${k.margen.toFixed(1)} % sobre venta · ${k.markup.toFixed(1)} % sobre costo)`),
+        row('Subtotal de venta', App.money(k.subtotal, pf.moneda)), pf.itbms_pct > 0 ? row(`ITBMS ${pf.itbms_pct} %`, App.money(k.itbms, pf.moneda)) : null, row('TOTAL PROFORMA', App.money(k.total, pf.moneda), 'total'));
+    }
+    function drawRows() {
+      tbody.replaceChildren(...pf.items.map((i, idx) => {
+        const bind = (inp, k, isNum) => { inp.addEventListener('input', () => { i[k] = isNum ? App.num(inp.value) ?? 0 : inp.value; recalc(); }); return inp; };
+        return el('tr', {}, el('td', {}, bind(el('input', { value: i.descripcion, disabled: locked }), 'descripcion')),
+          el('td', {}, bind(numInput(i.cantidad, { disabled: locked, style: 'width:70px' }), 'cantidad', true)), el('td', {}, bind(numInput(i.costo_unit, { disabled: locked, style: 'width:110px' }), 'costo_unit', true)),
+          el('td', {}, bind(numInput(i.utilidad_pct, { disabled: locked, style: 'width:80px' }), 'utilidad_pct', true)), el('td', { class: 'num pu' }), el('td', { class: 'num lt' }),
+          el('td', {}, !locked && el('button', { class: 'btn ghost small', type: 'button', text: '✕', onclick: () => { pf.items.splice(idx, 1); drawRows(); } })));
+      })); recalc();
+    }
+    drawRows(); itbms.addEventListener('input', recalc);
+    const util = numInput(20, { style: 'width:90px', disabled: locked });
+    const valid = numInput(pf.validez_dias, { step: '1', disabled: locked }), cond = el('input', { value: pf.condiciones_pago || '', disabled: locked }), nota = el('textarea', { value: pf.notas_cliente || '', placeholder: 'Observaciones que verá el cliente en la proforma', disabled: locked });
+    const money = el('select', { disabled: locked }, el('option', { value: 'USD', text: 'USD' }), el('option', { value: 'PAB', text: 'PAB' })); money.value = pf.moneda;
+
+    const body = () => ({
+      cotizacion_id: r.id, estado: pf.estado, moneda: money.value, validez_dias: Math.max(1, App.num(valid.value) || 15), condiciones_pago: cond.value.trim() || null, notas_cliente: nota.value.trim() || null,
+      itbms_pct: pf.itbms_pct, items: pf.items.filter((i) => (i.descripcion || '').trim()), ...(() => { const k = pfCalc(pf.items, pf.itbms_pct); return { total_costo: k.costo, subtotal: k.subtotal, itbms_monto: k.itbms, total: k.total }; })()
+    });
+    const save = async (extra = {}) => {
+      const b = { ...body(), ...extra }; if (!b.items.length) { App.toast('Agrega al menos una línea'); return null; }
+      const saved = pf.id ? await App.patch('proformas', pf.id, b) : await App.insert('proformas', b); D.pf = saved; return saved;
+    };
+    const guarded = (fn) => App.guard(async () => { const s = await fn(); if (s !== null) { await reloadDetail(D); renderDetail(D); } });
+    const contact = cliInfo(D);
+    const stageTo = async (estado) => { if (['nueva', 'en_revision', 'cotizando'].includes(r.estado)) await setStage(D, estado); };
+    return el('div', {},
+      el('div', { class: 'box' }, el('h3', { text: 'Proformas de esta solicitud' }), selector),
+      locked ? el('div', { class: 'box' }, el('b', { text: 'Proforma aceptada: ' + pf.numero }), el('div', { class: 'actions' }, el('button', { class: 'btn ghost small', type: 'button', text: 'Reabrir como borrador', onclick: () => guarded(() => App.patch('proformas', pf.id, { estado: 'borrador' })) }))) : null,
+      el('div', { class: 'box' }, el('h3', { text: 'Costos y utilidad' }), el('p', { class: 'sub', text: 'Costo unitario = lo que te cuesta (oferta del proveedor, flete). La utilidad % se suma sobre el costo para fijar el precio al cliente. El cliente solo ve precios, nunca costos ni utilidad.' }),
+        !locked && el('div', { class: 'actions' }, el('button', { class: 'btn ghost small', type: 'button', text: 'Cargar / recargar costos desde ofertas aceptadas y flete contratado', onclick: () => {
+          const d = newDraft(D); if (!d.items.length) return App.toast('No hay ofertas aceptadas ni fletes contratados. Acepta una oferta en la pestaña Proveedores, o agrega líneas manualmente.');
+          if (pf.items.length && !confirm('Esto reemplaza las líneas actuales por los costos de las ofertas aceptadas y el flete contratado. ¿Continuar?')) return;
+          pf.items = d.items; drawRows(); App.toast('Costos cargados');
+        } }), el('button', { class: 'btn ghost small', type: 'button', text: '+ Línea', onclick: () => { pf.items.push({ descripcion: '', cantidad: 1, costo_unit: 0, utilidad_pct: Number(util.value) || 0 }); drawRows(); } }),
+          el('span', { class: 'sub', text: 'Utilidad global %:' }), util, el('button', { class: 'btn ghost small', type: 'button', text: 'Aplicar a todas', onclick: () => { pf.items.forEach((i) => (i.utilidad_pct = Number(util.value) || 0)); drawRows(); } })),
+        el('div', { class: 'table-wrap' }, el('table', { class: 'lines' }, el('thead', {}, el('tr', {}, ...['Descripción', 'Cant.', 'Costo unit.', 'Utilidad %', 'Precio unit.', 'Total venta', ''].map((h, i) => el('th', { class: i > 3 && i < 6 ? 'num' : '', text: h })))), tbody)),
+        el('div', { class: 'grid4', style: 'margin-top:.7rem' }, field('Moneda', money), field('Impuesto', itbms), field('Validez (días)', valid), field('Condiciones de pago', cond)), field('Observaciones para el cliente', nota), totals),
+      el('div', { class: 'box' }, el('div', { class: 'actions' },
+        !locked && el('button', { class: 'btn', type: 'button', text: pf.id ? 'Guardar cambios' : 'Guardar proforma', onclick: () => guarded(() => save().then((s) => { s && App.toast('Proforma guardada: ' + s.numero); return s; })) }),
+        el('button', { class: 'btn ghost', type: 'button', text: 'Vista previa / PDF', onclick: () => App.printHtml(pf.numero || 'Proforma', pfHtml(D, { ...pf, ...body(), numero: pf.numero, created_at: pf.created_at })) })),
+        pf.id && !locked && el('div', { class: 'actions' },
+          contact.tel.length >= 7 && el('button', { class: 'btn wa small', type: 'button', text: 'Enviar por WhatsApp', onclick: () => { App.openLink(App.waLink(contact.tel, pfMessage(D, { ...pf, ...body(), numero: pf.numero }))); App.toast('Adjunta el PDF (Vista previa → Guardar como PDF)'); guarded(async () => { const s = await save({ estado: 'enviada', enviada_at: new Date().toISOString() }); await stageTo('proforma_enviada'); return s; }); } }),
+          contact.correo && el('button', { class: 'btn mail small', type: 'button', text: 'Enviar por correo', onclick: () => { App.openLink(App.mailLink(contact.correo, `Proforma ${pf.numero} — ${r.tension}`, pfMessage(D, { ...pf, ...body(), numero: pf.numero }))); App.toast('Adjunta el PDF (Vista previa → Guardar como PDF)'); guarded(async () => { const s = await save({ estado: 'enviada', enviada_at: new Date().toISOString() }); await stageTo('proforma_enviada'); return s; }); } }),
+          el('button', { class: 'btn ghost small', type: 'button', text: 'Copiar mensaje', onclick: () => App.copy(pfMessage(D, { ...pf, ...body(), numero: pf.numero })) }),
+          el('button', { class: 'btn ok small', style: 'background:var(--ok)', type: 'button', text: 'Marcar aceptada por el cliente', onclick: () => confirm('¿El cliente aceptó esta proforma? La solicitud pasará a “Ganada” y se facturará en cuentas por cobrar.') && guarded(async () => { const s = await save({ estado: 'aceptada' }); await setStage(D, 'ganada'); return s; }) }),
+          el('button', { class: 'btn ghost small', type: 'button', text: 'Marcar rechazada', onclick: () => guarded(() => save({ estado: 'rechazada' })) })),
+        !pf.id && el('div', { class: 'sub', text: 'Guarda la proforma para poder enviarla al cliente.' })));
+  }
+
+  // ---------- Pestaña: Cobros y pagos ----------
+  function tabCobros(D) {
+    const r = D.r; const acc = D.proformas.find((p) => p.estado === 'aceptada');
+    const venta = acc ? Number(acc.total) : 0, ventaNeta = acc ? Number(acc.subtotal) : 0, costoComp = App.r2(D.rfqs.filter((x) => ['aceptada', 'ordenada', 'entregada'].includes(x.estado)).reduce((s, x) => s + Number(x.precio_total || 0), 0) + D.fletes.filter((x) => x.estado === 'contratada').reduce((s, x) => s + fleteCost(x), 0));
+    const sum = (...t) => App.r2(D.movs.filter((m) => t.includes(m.tipo)).reduce((s, m) => s + Number(m.monto), 0));
+    const cobrado = sum('cobro'), pagado = sum('pago_proveedor', 'pago_transportista', 'gasto');
+    const add = (tipo) => App.movimientoForm({ tipo, cotizacion_id: r.id, cliente_id: r.cliente_id || null, proforma_id: acc ? acc.id : null }, () => refresh(D));
+    return el('div', {},
+      el('div', { class: 'stats' },
+        ...[['Venta (proforma aceptada, con impuesto)', App.money(venta), ''], ['Cobrado', App.money(cobrado), 'pos'], ['Por cobrar', App.money(App.r2(venta - cobrado)), venta - cobrado > 0 ? 'neg' : 'pos'],
+          ['Costo comprometido', App.money(costoComp), ''], ['Pagado (proveedores, fletes, gastos)', App.money(pagado), ''], ['Por pagar', App.money(App.r2(costoComp - pagado)), ''], ['Utilidad estimada (venta sin impuesto − costo)', App.money(App.r2(ventaNeta - costoComp)), ventaNeta - costoComp >= 0 ? 'pos' : 'neg']]
+          .map(([l, v, k]) => el('div', { class: 'stat ' + k }, el('b', { text: v }), el('span', { text: l })))),
+      !r.cliente_id && el('div', { class: 'box' }, el('b', { text: 'Vincula esta solicitud a un cliente (pestaña Resumen) para que sus cobros entren al estado de cuenta.' })),
+      el('div', { class: 'box' }, el('div', { class: 'actions' }, el('button', { class: 'btn small', type: 'button', text: '+ Cobro del cliente', onclick: () => add('cobro') }), el('button', { class: 'btn ghost small', type: 'button', text: '+ Pago a proveedor', onclick: () => add('pago_proveedor') }),
+        el('button', { class: 'btn ghost small', type: 'button', text: '+ Pago a transportista', onclick: () => add('pago_transportista') }), el('button', { class: 'btn ghost small', type: 'button', text: '+ Gasto', onclick: () => add('gasto') })),
+        D.movs.length ? el('div', { class: 'table-wrap' }, el('table', {}, el('thead', {}, el('tr', {}, ...['Fecha', 'Tipo', 'Detalle', 'Monto', ''].map((h, i) => el('th', { class: i === 3 ? 'num' : '', text: h })))),
+          el('tbody', {}, D.movs.map((m) => el('tr', {}, el('td', { text: App.fmtDay(m.fecha) }), el('td', { text: App.label(App.MOV_TIPOS, m.tipo) }), el('td', { text: [m.metodo, m.referencia, m.notas].filter(Boolean).join(' · ') }),
+            el('td', { class: 'num', text: (m.tipo === 'cobro' ? '+ ' : '− ') + App.money(m.monto, m.moneda) }),
+            el('td', {}, el('button', { class: 'btn ghost small', type: 'button', text: '✕', onclick: () => confirm('¿Eliminar este movimiento?') && App.guard(async () => { await App.del('movimientos', m.id); await refresh(D); }) }))))))) : el('div', { class: 'empty', text: 'Aún no hay movimientos para esta solicitud.' })));
+  }
+})();
