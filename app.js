@@ -9,7 +9,7 @@ const VOLTAGE_SPECIFICATIONS = {
     title: 'Especificaciones de Suministro — Líneas de 13.8 kV',
     category: 'MEDIA TENSIÓN · DISTRIBUCIÓN PRIMARIA',
     summary:
-      'Materiales para líneas de distribución primaria: postes, crucetas, aisladores, conductores, herrajes, apartarrayos, puesta a tierra y accesorios.',
+      'Materiales para líneas de distribución primaria: postes, crucetas, aisladores, conductores (próximamente), herrajes, apartarrayos, puesta a tierra y accesorios.',
     conductors: [
       'Conductores desnudos ACSR ( calibres 1/0 AWG Raven a 336.4 kcmil Linnet ) y AAAC',
       'Cable semiaislado / ecológico para zonas arboladas cuando se especifique',
@@ -35,7 +35,7 @@ const VOLTAGE_SPECIFICATIONS = {
     title: 'Especificaciones de Suministro — Líneas de 34.5 kV',
     category: 'MEDIA TENSIÓN · SUBTRANSMISIÓN Y DISTRIBUCIÓN',
     summary:
-      'Suministro para subtransmisión y distribución: postes reforzados, aisladores, conductores, cables de guarda, estructuras de ángulo y herrajes.',
+      'Suministro para subtransmisión y distribución: postes reforzados, aisladores, conductores y cables de guarda (próximamente), estructuras de ángulo y herrajes.',
     conductors: [
       'Conductores de fase ACSR y AAAC (266.8 Partridge, 336.4 Linnet, 477 Hawk)',
       'Cable de guarda de acero galvanizado EHS (5/16", 3/8") o ACS para blindaje',
@@ -61,7 +61,7 @@ const VOLTAGE_SPECIFICATIONS = {
     title: 'Especificaciones de Suministro — Líneas de 115 kV',
     category: 'ALTA TENSIÓN · SUBTRANSMISIÓN Y TRANSMISIÓN',
     summary:
-      'Estructuras, torres, cadenas de aisladores, conductores, cables de guarda, herrajes, anclajes, cimentaciones y equipos de línea.',
+      'Estructuras, torres, cadenas de aisladores, conductores y cables de guarda (próximamente), herrajes, anclajes, cimentaciones y equipos de línea.',
     conductors: [
       'Conductores ACSR, AAAC y ACSS (477 Hawk, 795 Drake, 954 Rail, 1113 Bluejay)',
       'Cables de guarda EHS / Alumoweld y cable óptico OPGW de 24 a 48 fibras',
@@ -87,7 +87,7 @@ const VOLTAGE_SPECIFICATIONS = {
     title: 'Especificaciones de Suministro — Líneas de 230 kV',
     category: 'ALTA TENSIÓN · TRANSMISIÓN TRONCAL DE GRAN POTENCIA',
     summary:
-      'Torres autosoportadas, postes tubulares, conductores de gran capacidad, OPGW, cadenas de aisladores, herrajes de alta resistencia y sistemas de protección.',
+      'Torres autosoportadas, postes tubulares, conductores de gran capacidad y OPGW (próximamente), cadenas de aisladores, herrajes de alta resistencia y sistemas de protección.',
     conductors: [
       'Conductores de gran capacidad en configuración simple o en haz (2x o 3x por fase): ACSR 795 Drake, 954, 1113',
       'Cable de guarda OPGW de alta capacidad de cortocircuito y segundo hilo de guarda ACS/EHS',
@@ -297,7 +297,7 @@ document.addEventListener('DOMContentLoaded', () => {
       <p style="color: #e2e8f0; font-size: 0.96rem; margin-bottom: 1rem;">${data.summary}</p>
       <div class="spec-modal-grid">
         <div class="spec-modal-box">
-          <h4>Conductores y Cable de Guarda</h4>
+          <h4>Conductores y Cable de Guarda (próximamente)</h4>
           <ul>${data.conductors.map((item) => `<li>• ${item}</li>`).join('')}</ul>
         </div>
         <div class="spec-modal-box">
