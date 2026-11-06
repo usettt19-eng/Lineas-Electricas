@@ -21,6 +21,8 @@
     ['proteccion', 'Protección y puesta a tierra'],
     ['opgw', 'Fibra óptica / OPGW'],
     ['tendido', 'Accesorios de tendido'],
+    ['transformadores', 'Transformadores'],
+    ['alumbrado', 'Alumbrado público'],
     ['otros', 'Otros']
   ];
   App.MODALIDADES = [['maritimo', 'Marítimo'], ['aereo', 'Aéreo'], ['terrestre', 'Terrestre'], ['multimodal', 'Multimodal']];

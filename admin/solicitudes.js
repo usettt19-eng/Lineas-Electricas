@@ -40,7 +40,8 @@
     const t = [r.partidas, r.descripcion, r.conductor].join(' ').toLowerCase(); const out = new Set();
     [['conductores', /acsr|aaac|acss|conductor|cable|guarda/], ['estructuras', /torre|poste|cruceta|estructura|stub|anclaje|celos/],
       ['aislamiento', /aislador|herraje|grapa|cadena|retenida|yugo/], ['proteccion', /apartarrayo|tierra|cortacircuito|seccionador|fusible|amortiguador|protecc|reconectador/],
-      ['opgw', /opgw|fibra/], ['tendido', /tendido|accesorios/]].forEach(([k, re]) => re.test(t) && out.add(k));
+      ['opgw', /opgw|fibra/], ['tendido', /tendido|accesorios/],
+      ['transformadores', /transformador|pad.?mounted|pedestal|subestaci|\bkva\b|\bmva\b/], ['alumbrado', /alumbrado|luminaria|\bled\b|fotocelda|proyector|farol/]].forEach(([k, re]) => re.test(t) && out.add(k));
     return out;
   }
   const shareText = (share) => (share && share.docs.length ? `\n\nDocumentos técnicos (enlaces de descarga válidos hasta el ${share.until}):\n${share.docs.map((d) => `• ${d.nombre}: ${d.url}`).join('\n')}` : '');

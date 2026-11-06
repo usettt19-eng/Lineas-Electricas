@@ -377,20 +377,22 @@
           <span class="section-eyebrow">CATÁLOGO DE SUMINISTRO INDUSTRIAL</span>
           <h2 id="productos-title" class="section-title">Productos y elementos suministrados</h2>
           <p class="section-description">
-            Proveemos cada componente electromecánico y estructural requerido desde la cimentación hasta el tendido y puesta en servicio de líneas aéreas.
+            Proveemos cada componente electromecánico y estructural requerido desde la cimentación hasta el tendido y puesta en servicio de líneas aéreas, además de transformadores y alumbrado público.
           </p>
         </div>
 
         <!-- Barra de filtrado rápido por grupo -->
         <div class="product-filter-bar" role="tablist" aria-label="Filtrar categorías de productos">
-          <button type="button" class="filter-chip active" data-filter="all">Todos los elementos (12)</button>
+          <button type="button" class="filter-chip active" data-filter="all">Todos los elementos (16)</button>
           <button type="button" class="filter-chip" data-filter="conductores">Conductores y OPGW</button>
           <button type="button" class="filter-chip" data-filter="estructuras">Estructuras y Cimentación</button>
           <button type="button" class="filter-chip" data-filter="aislamiento">Aisladores y Herrajes</button>
           <button type="button" class="filter-chip" data-filter="proteccion">Protección y Tendido</button>
+          <button type="button" class="filter-chip" data-filter="transformadores">Transformadores</button>
+          <button type="button" class="filter-chip" data-filter="alumbrado">Alumbrado Público</button>
         </div>
 
-        <!-- Grid de las 12 categorías exactas -->
+        <!-- Grid de las 16 categorías (12 de líneas aéreas + transformadores + alumbrado público) -->
         <div class="products-grid" id="productsGrid">
           <!-- 1 -->
           <article class="product-card" data-category="conductores">
@@ -533,6 +535,54 @@
               <h3 class="pc-title">Accesorios para construcción, tendido y mantenimiento</h3>
               <p class="pc-text">Amortiguadores de vibración eólica, separadores de fases, poleas de tendido, medias de jalado, comelongs, dinamómetros y pértigas de puesta a tierra temporal.</p>
               <button type="button" class="pc-quote-btn" data-select-product="Accesorios para construcción, tendido y mantenimiento">Incluir en cotización +</button>
+            </div>
+          </article>
+
+          <!-- 13 -->
+          <article class="product-card" data-category="transformadores">
+            <div class="pc-icon" aria-hidden="true">
+              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><rect x="5" y="4" width="14" height="16" rx="2"/><path d="M9 9h6M9 12h6M9 15h6M12 2v2M12 20v2"/></svg>
+            </div>
+            <div class="pc-body">
+              <h3 class="pc-title">Transformadores de distribución</h3>
+              <p class="pc-text">Transformadores monofásicos y trifásicos de distribución tipo poste y pedestal (pad-mounted), en aceite o secos, para redes de 13.8 kV y 34.5 kV, con sus accesorios de conexión y protección.</p>
+              <button type="button" class="pc-quote-btn" data-select-product="Transformadores de distribución">Incluir en cotización +</button>
+            </div>
+          </article>
+
+          <!-- 14 -->
+          <article class="product-card" data-category="transformadores">
+            <div class="pc-icon" aria-hidden="true">
+              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><circle cx="9" cy="12" r="5"/><circle cx="15" cy="12" r="5"/><path d="M2 12h2M20 12h2"/></svg>
+            </div>
+            <div class="pc-body">
+              <h3 class="pc-title">Transformadores de potencia y subestaciones</h3>
+              <p class="pc-text">Transformadores de potencia y subestaciones compactas para niveles de 34.5 kV, 115 kV y 230 kV, con sus accesorios, protecciones y equipos asociados según la especificación del proyecto.</p>
+              <button type="button" class="pc-quote-btn" data-select-product="Transformadores de potencia y subestaciones">Incluir en cotización +</button>
+            </div>
+          </article>
+
+          <!-- 15 -->
+          <article class="product-card" data-category="alumbrado">
+            <div class="pc-icon" aria-hidden="true">
+              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><path d="M9 18h6M10 22h4"/><path d="M12 2a7 7 0 0 0-4 12.7V17h8v-2.7A7 7 0 0 0 12 2z"/></svg>
+            </div>
+            <div class="pc-body">
+              <h3 class="pc-title">Luminarias LED para alumbrado público</h3>
+              <p class="pc-text">Luminarias LED para vialidades, avenidas, parques y áreas deportivas, proyectores de alta potencia y soluciones con fotocelda o control inteligente, según los niveles de iluminación del proyecto.</p>
+              <button type="button" class="pc-quote-btn" data-select-product="Luminarias LED para alumbrado público">Incluir en cotización +</button>
+            </div>
+          </article>
+
+          <!-- 16 -->
+          <article class="product-card" data-category="alumbrado">
+            <div class="pc-icon" aria-hidden="true">
+              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><path d="M8 22V6a4 4 0 0 1 4-4h5"/><path d="M17 2v4M14 6h6M6 22h4"/></svg>
+            </div>
+            <div class="pc-body">
+              <h3 class="pc-title">Postes, brazos y accesorios para alumbrado público</h3>
+              <p class="pc-text">Postes metálicos y de concreto para alumbrado, brazos y bases de anclaje, cable, fotoceldas, controladores y accesorios de instalación para redes de alumbrado público.</p>
+              <button type="button" class="pc-quote-btn" data-select-product="Postes, brazos y accesorios para alumbrado público">Incluir en cotización +</button>
             </div>
           </article>
         </div>
