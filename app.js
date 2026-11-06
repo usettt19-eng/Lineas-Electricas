@@ -692,6 +692,14 @@ document.addEventListener('DOMContentLoaded', () => {
     return brandConfig;
   }
 
+  // Formato visible del WhatsApp: +código número (ej. +507 69759851)
+  function formatWa(raw) {
+    const d = String(raw || '').replace(/\D/g, '');
+    if (!d) return '';
+    const code = ['593', '886', '507', '58', '57', '52', '86', '34', '55', '54', '56', '51', '91', '90', '49', '39', '82', '81', '1'].find((c) => d.startsWith(c));
+    return code && d.length > code.length + 4 ? `+${code} ${d.slice(code.length)}` : `+${d}`;
+  }
+
   function applyBrandConfig(cfg) {
     document.querySelectorAll('[data-brand-name]').forEach((el) => {
       el.textContent = cfg.name;
@@ -722,6 +730,14 @@ document.addEventListener('DOMContentLoaded', () => {
         `Hola ${contactPerson} (${cfg.name}), solicito una cotización de materiales para líneas eléctricas.`
       );
       el.setAttribute('href', `https://wa.me/${cleanWa}?text=${msg}`);
+    });
+    // Número de WhatsApp visible (barra superior, contacto, pie de página, globo flotante)
+    const waDisplay = formatWa(cfg.whatsapp);
+    document.querySelectorAll('[data-brand-wa-text]').forEach((el) => {
+      el.textContent = waDisplay;
+    });
+    document.querySelectorAll('.whatsapp-float').forEach((el) => {
+      el.setAttribute('aria-label', `Contactar por WhatsApp con ${cfg.contact || DEFAULT_BRAND_CONFIG.contact} (${waDisplay})`);
     });
     document.title = `${cfg.name} | Proveedor de Materiales para Líneas Eléctricas 13.8 kV, 34.5 kV, 115 kV y 230 kV`;
   }
