@@ -36,7 +36,7 @@
   const URL_RE = /\bhttps?:\/\/[^\s<>"']+|\bwww\.[^\s<>"']+/gi;
   const LABEL = /^(?:company|empresa|raz[oó]n social|name|nombre|proveedor|supplier|manufacturer|fabricante)\s*[:：-]\s*/i;
   const LEGAL = /\b(S\.?\s?A\.?(?:\s?S\.?)?|S\.?\s?R\.?\s?L\.?|LTDA|Ltd\.?|Limited|Inc\.?|Corp\.?|Corporation|GmbH|C\.?\s?A\.?|Company|Group|Grupo|Industries|Industrial|Electric|Electrical|Power|Cables?|Technology|Technologies)\b/i;
-  const NOT_NAME = /^(tel|phone|mobile|m[oó]vil|cel|fax|email|e-mail|correo|web|website|address|direcci[oó]n|contact|contacto|attn|atenci[oó]n|whatsapp|wechat|skype)\b/i;
+  const NOT_NAME = /^(tel|phone|mobile|m[oó]vil|cel|fax|email|e-mail|correo|web|website|address|direcci[oó]n|domicilio|contact|contacto|attn|atenci[oó]n|whatsapp|wechat|skype|rif|ruc|nit|tax|vat|cif)\b/i;
 
   // Prioridad: prefijo del teléfono (+) > dominio del correo/web > país más mencionado en el texto
   function detectCountry(text, phones, hosts) {
@@ -50,6 +50,8 @@
   function findPhones(lines) {
     const out = [];
     lines.forEach((line) => {
+      // los números de RIF/RUC/NIT y las direcciones no son teléfonos
+      if (/^(?:rif|ruc|nit|c\.?i\.?f\.?|tax|vat|n[º°o]\s*fiscal|address|direcci[oó]n|domicilio)\b/i.test(line)) return;
       const clean = line.replace(EMAIL, ' ').replace(URL_RE, ' ').replace(/wa\.me\/\d+/gi, ' ');
       const wa = /whats|\bwa\b|wechat|m[oó]vil|movil|mobile|\bcel/i.test(line);
       for (const m of clean.matchAll(/(\+?\d[\d\s().-]{6,}\d)/g)) {
@@ -170,5 +172,129 @@
         el('div', { class: 'actions' }, save, el('button', { class: 'btn ghost', type: 'button', text: 'Volver', onclick: () => { err.hidden = true; stepInput(); } })));
     }
     App.openDialog(`Importar ${plural}`, body, true); stepInput();
+  };
+
+  /* ================= Motor genérico (clientes y productos) ================= */
+  App.bulkImport = ({ title, plural, singular, intro, placeholder, parseText: parse, parseRows, makeCard, table, top, onDone }) => {
+    const body = el('div'); const err = el('div', { class: 'msg-err', hidden: true }); const fail = (m) => { err.textContent = m; err.hidden = false; };
+    function stepInput() {
+      const ta = el('textarea', { style: 'min-height:200px', placeholder }); const file = el('input', { type: 'file', accept: '.xlsx,.xls,.csv,.tsv,.txt' });
+      file.addEventListener('change', async () => {
+        err.hidden = true;
+        try { const c = parseRows(await App.readTableFile(file.files[0])); c && c.length ? stepPreview(c) : fail('No encontré columnas reconocibles en el archivo. Revisa los encabezados.'); } catch (_) { fail('No se pudo leer el archivo. Usa .xlsx, .xls o .csv.'); }
+      });
+      body.replaceChildren(el('p', { class: 'sub', text: intro }), el('div', { class: 'field' }, el('label', { text: 'Texto copiado' }), ta), err,
+        el('div', { class: 'actions' }, el('button', { class: 'btn', type: 'button', text: 'Analizar texto', onclick: () => { err.hidden = true; const c = parse(ta.value); c.length ? stepPreview(c) : fail('No pude encontrar datos en ese texto.'); } })),
+        el('div', { class: 'field', style: 'margin-top:1rem' }, el('label', { text: 'O importa una lista en Excel / CSV' }), file));
+    }
+    function stepPreview(cands) {
+      const cards = cands.map((c) => makeCard(c)); const save = el('button', { class: 'btn', type: 'button', text: 'Guardar' });
+      const count = () => cards.filter((c) => c.get()).length; const upd = () => (save.textContent = `Guardar ${count()} ${count() === 1 ? singular : plural}`);
+      body.addEventListener('input', upd); body.addEventListener('click', () => setTimeout(upd, 0)); upd();
+      save.addEventListener('click', () => {
+        const rows = cards.map((c) => c.get()).filter(Boolean); err.hidden = true;
+        if (!rows.length) return fail('Marca al menos uno para guardar.');
+        if (rows.some((r) => !r.nombre || r.nombre.length < 2)) return fail('Todos los marcados necesitan nombre.');
+        App.guard(async () => {
+          save.disabled = true;
+          try { await App.api(`/rest/v1/${table}`, { method: 'POST', headers: { Prefer: 'return=minimal' }, body: JSON.stringify(rows) }); } catch (e) { save.disabled = false; throw e; }
+          await App.loadDirs(true); App.closeDialog(); App.toast(`${rows.length} ${rows.length === 1 ? singular : plural} guardado(s)`); onDone && onDone();
+        });
+      });
+      body.replaceChildren(el('p', { class: 'sub', text: `Se detectaron ${cands.length}. Revisa y corrige lo que haga falta; los que ya existen vienen desmarcados.` }), top || null, ...cards.map((c) => c.node), err,
+        el('div', { class: 'actions' }, save, el('button', { class: 'btn ghost', type: 'button', text: 'Volver', onclick: () => { err.hidden = true; stepInput(); } })));
+    }
+    App.openDialog(title, body, true); stepInput();
+  };
+  const fld = (label, node) => el('div', { class: 'field' }, el('label', { text: label }), node);
+
+  /* ---------------- Clientes ---------------- */
+  const RUC_RE = /\b(?:RUC|RIF|NIT|C\.?I\.?F\.?|Tax\s*ID|VAT(?:\s*No\.?)?|N[º°o]\s*fiscal)\s*[:#-]?\s*([A-Z]?[-\s]?\d[0-9A-Z.\-\s]{4,20})/i;
+  const ADDR_RE = /^(?:address|direcci[oó]n|direccion|domicilio|ubicaci[oó]n)\s*[:：-]\s*(.{4,250})$/i;
+  function clienteFromBlock(block) {
+    const b = parseBlock(block, () => []); const lines = block.split('\n').map((l) => l.trim());
+    let ruc = null, direccion = null;
+    for (const l of lines) { if (!ruc) { const m = l.match(RUC_RE); if (m) ruc = m[1].trim().slice(0, 60); } if (!direccion) { const m = l.match(ADDR_RE); if (m) direccion = m[1].trim(); } }
+    const empresa = LEGAL.test(b.nombre) ? b.nombre : null; const tel = b.telefono || (b.whatsapp ? '+' + b.whatsapp : null);
+    const notas = [b.pais && `País: ${b.pais}`, b.notas].filter(Boolean).join('\n') || null;
+    return { nombre: (b.contacto || b.nombre || '').slice(0, 160), empresa, ruc, correo: b.correo, telefono: tel, direccion, notas, ok: !!(b.correo || tel || ruc || empresa) };
+  }
+  const CLI_COLS = { nombre: ['nombre', 'contacto', 'cliente', 'name', 'persona de contacto'], empresa: ['empresa', 'compania', 'company', 'razon social'], ruc: ['ruc', 'rif', 'nit', 'cif', 'identificacion', 'tax id'], correo: ['correo', 'email', 'e mail', 'mail'], telefono: ['telefono', 'tel', 'phone', 'celular', 'movil', 'whatsapp'], direccion: ['direccion', 'address', 'domicilio'], notas: ['notas', 'observaciones', 'comentarios'] };
+  function mapTable(rows, COLS, need) {
+    let hi = -1, map = {};
+    for (let i = 0; i < Math.min(6, rows.length); i++) { const m = {}, used = new Set(); rows[i].forEach((h, j) => { const k = Object.keys(COLS).find((x) => !used.has(x) && COLS[x].includes(norm(h))); if (k) { m[j] = k; used.add(k); } }); const v = Object.values(m); if (v.length >= 2 && need.some((n) => v.includes(n))) { hi = i; map = m; break; } }
+    if (hi < 0) return null; const col = (k) => Object.keys(map).find((j) => map[j] === k);
+    return rows.slice(hi + 1).map((r) => (k) => { const j = col(k); return j === undefined ? '' : String(r[j] ?? '').trim(); });
+  }
+  App.importClientes = (onDone) => {
+    const existing = () => App.cache.clientes || [];
+    App.bulkImport({
+      title: 'Importar clientes', plural: 'clientes', singular: 'cliente', table: 'clientes', onDone,
+      intro: 'Pega los datos del cliente (ficha, firma de correo, mensaje de WhatsApp). El panel detecta nombre, empresa, RIF/RUC/NIT, dirección, correo y teléfono. Puedes pegar varios separados por una línea en blanco.',
+      placeholder: 'Ej.\nConstructora Orinoco C.A.\nRIF: J-31234567-8\nContacto: Ing. María Pérez\nDirección: Av. Francisco de Miranda, Caracas\nTel: +58 212 555 1234\nmperez@orinoco.com',
+      parseText: (text) => { const raw = String(text || '').replace(/\r/g, '').trim(); if (!raw) return [];
+        const first = raw.split('\n')[0]; if (first.includes('\t') || first.split(';').length >= 3 || first.split(',').length >= 4) { const t = CLI_COLS && mapTable(App.parseDelimited(raw), CLI_COLS, ['nombre', 'correo', 'empresa']); if (t) return t.map((g) => ({ nombre: g('nombre') || g('empresa'), empresa: g('empresa') || null, ruc: g('ruc') || null, correo: g('correo').toLowerCase() || null, telefono: g('telefono') || null, direccion: g('direccion') || null, notas: g('notas') || null })).filter((c) => c.nombre); }
+        return raw.split(/\n\s*\n+|\n-{3,}\n/).map((b) => clienteFromBlock(b.trim())).filter((c) => c.ok && c.nombre); },
+      parseRows: (rows) => { const t = mapTable(rows, CLI_COLS, ['nombre', 'correo', 'empresa']); return t && t.map((g) => ({ nombre: g('nombre') || g('empresa'), empresa: g('empresa') || null, ruc: g('ruc') || null, correo: g('correo').toLowerCase() || null, telefono: g('telefono') || null, direccion: g('direccion') || null, notas: g('notas') || null })).filter((c) => c.nombre); },
+      makeCard: (c) => {
+        const d = existing().find((e) => (c.correo && (e.correo || '').toLowerCase() === c.correo.toLowerCase()) || (c.ruc && e.ruc && norm(e.ruc) === norm(c.ruc)) || (c.nombre && norm(e.nombre) === norm(c.nombre)));
+        const inc = el('input', { type: 'checkbox', checked: !d }); const f = { nombre: el('input', { value: c.nombre || '' }), empresa: el('input', { value: c.empresa || '' }), ruc: el('input', { value: c.ruc || '' }), correo: el('input', { type: 'email', value: c.correo || '' }),
+          telefono: el('input', { value: c.telefono || '' }), direccion: el('input', { value: c.direccion || '' }), notas: el('textarea', { value: c.notas || '', style: 'min-height:50px' }) };
+        const node = el('div', { class: 'row-card' }, el('div', { class: 'head' }, el('label', { class: 'check' }, inc, el('b', { text: c.nombre })), d ? App.badge(`Ya existe: ${d.nombre}`, 'warn') : App.badge('Nuevo', 'ok')),
+          el('div', { class: 'grid2' }, fld('Nombre / contacto *', f.nombre), fld('Empresa', f.empresa), fld('RIF / RUC / NIT', f.ruc), fld('Correo', f.correo), fld('Teléfono / WhatsApp', f.telefono), fld('Dirección', f.direccion)), fld('Notas', f.notas));
+        const v = (k) => f[k].value.trim() || null;
+        return { node, get: () => (inc.checked ? { nombre: f.nombre.value.trim(), empresa: v('empresa'), ruc: v('ruc'), correo: (v('correo') || '').toLowerCase() || null, telefono: v('telefono'), direccion: v('direccion'), notas: v('notas'), activo: true } : null) };
+      }
+    });
+  };
+
+  /* ---------------- Productos ---------------- */
+  const UNITS = [[/^(m|mt|mts|metro|metros|meter|meters)$/i, 'm'], [/^(km|kilometro|kilometros)$/i, 'km'], [/^(und|unidad|unidades|unit|units|pc|pcs|pza|pieza|piezas|ea)$/i, 'und'], [/^(juego|juegos|set|sets|kit)$/i, 'juego'], [/^(kg|kilo|kilos)$/i, 'kg'], [/^(ton|tn|tonelada|toneladas)$/i, 'ton'], [/^(rollo|rollos|roll|rolls)$/i, 'rollo'], [/^(carrete|carretes|reel|reels)$/i, 'carrete']];
+  const normUnit = (u) => { const t = String(u || '').trim(); const f = UNITS.find(([re]) => re.test(t)); return f ? f[1] : t ? t.slice(0, 20) : 'und'; };
+  const PRICE_NUM = (s) => { let t = String(s).replace(/\s/g, ''); if (t.includes(',') && t.includes('.')) t = t.replace(/,/g, ''); else if (/^\d{1,3}(,\d{3})+$/.test(t)) t = t.replace(/,/g, ''); else t = t.replace(',', '.'); const n = Number(t); return Number.isFinite(n) ? n : null; };
+  const PRICE_RE = /(?:US\$|USD|\$|PAB|B\/\.?)\s*(\d[\d.,]*)|(\d[\d.,]*)\s*(?:USD|US\$|PAB|d[oó]lares)/i;
+  const UNIT_RE = /(?:\/|\bper\s+|\bpor\s+|\bx\s+)(m|mts?|metros?|km|und|unidad(?:es)?|pcs?|pzas?|piezas?|juego|set|kg|ton|rollo|roll|carrete|reel)\b/i;
+  function detectCategory(text, rules) { const hit = rules.find(([, re]) => re.test(text)); return hit ? hit[0] : null; }
+  function productFromBlock(block, rules) {
+    const lines = block.split('\n').map((l) => l.trim()).filter(Boolean); let head = lines[0].replace(/^(?:[-•*·▪]+|\d+[.)])\s*/, '');
+    let costo = null; const pm = head.match(PRICE_RE); if (pm) { costo = PRICE_NUM(pm[1] || pm[2]); head = head.replace(pm[0], ' '); }
+    let unidad = null; const um = head.match(UNIT_RE); if (um) { unidad = normUnit(um[1]); head = head.replace(um[0], ' '); }
+    head = head.replace(/\(\s*\)/g, '').replace(/\s*[-–—:|,]+\s*$/g, '').replace(/\s+/g, ' ').replace(/\s*[-–—|]\s*$/, '').trim();
+    return { nombre: head.slice(0, 200), descripcion: lines.slice(1).join(' ').slice(0, 1000) || null, categoria: detectCategory(block, rules), unidad: unidad || 'und', costo_ref: costo, moneda: 'USD', proveedor: null };
+  }
+  const PROD_COLS = { nombre: ['nombre', 'producto', 'product', 'item', 'articulo', 'material'], descripcion: ['descripcion', 'description', 'detalle', 'especificaciones', 'specs'], unidad: ['unidad', 'und', 'um', 'unit', 'uom'],
+    costo: ['costo', 'costo ref', 'precio', 'precio unitario', 'price', 'unit price', 'cost', 'precio usd'], moneda: ['moneda', 'currency'], categoria: ['categoria', 'category', 'familia'], proveedor: ['proveedor', 'supplier', 'vendor'] };
+  function productsFromTable(rows, rules) {
+    let t = mapTable(rows, PROD_COLS, ['nombre']);
+    if (!t) { const alt = { ...PROD_COLS, nombre: [...PROD_COLS.nombre, 'descripcion', 'description'], descripcion: ['detalle', 'especificaciones', 'specs'] }; t = mapTable(rows, alt, ['nombre']); }
+    if (!t) return null;
+    return t.map((g) => { const text = [g('nombre'), g('descripcion'), g('categoria')].join(' '); const cat = App.ESPECIALIDADES.find(([k, l]) => norm(g('categoria')) === norm(k) || norm(g('categoria')) === norm(l));
+      return { nombre: g('nombre').slice(0, 200), descripcion: g('descripcion').slice(0, 1000) || null, categoria: cat ? cat[0] : detectCategory(text, rules), unidad: normUnit(g('unidad')), costo_ref: g('costo') ? PRICE_NUM(g('costo').replace(/[^\d.,]/g, '')) : null, moneda: /pab/i.test(g('moneda')) ? 'PAB' : 'USD', proveedor: g('proveedor') || null }; }).filter((p) => p.nombre);
+  }
+  App.importProductos = (onDone) => {
+    const rules = App.IMPORT_RULES.proveedores; const existing = () => App.cache.productos || [];
+    const provs = (App.cache.proveedores || []).filter((p) => p.activo);
+    const provAll = el('select', {}, el('option', { value: '', text: '— ninguno —' }), ...provs.map((p) => el('option', { value: p.id, text: p.nombre })));
+    const top = el('div', { class: 'field' }, el('label', { text: 'Proveedor habitual para todos los productos que no traigan uno (opcional)' }), provAll);
+    App.bulkImport({
+      title: 'Importar productos', plural: 'productos', singular: 'producto', table: 'productos', onDone, top,
+      intro: 'Pega una lista de productos (uno por línea) o una lista de precios copiada de la web o de Excel. El panel detecta nombre, precio, unidad y categoría. Ej.: "Conductor ACSR 477 Hawk - $3.50/m".',
+      placeholder: 'Ej.\nConductor ACSR 477 MCM Hawk - $3.50/m\nAislador polimérico suspensión 115 kV - USD 48.00 por und\nCruceta metálica galvanizada tipo PT - 85 USD\n\n…o una tabla de Excel con encabezados: Producto, Unidad, Precio, Proveedor',
+      parseText: (text) => { const raw = String(text || '').replace(/\r/g, '').trim(); if (!raw) return [];
+        const first = raw.split('\n')[0]; if (first.includes('\t') || first.split(';').length >= 3) { const t = productsFromTable(App.parseDelimited(raw), rules); if (t && t.length) return t; }
+        const blocks = /\n\s*\n/.test(raw) ? raw.split(/\n\s*\n+/) : raw.split('\n'); return blocks.map((b) => b.trim()).filter(Boolean).map((b) => productFromBlock(b, rules)).filter((p) => p.nombre && p.nombre.length >= 2); },
+      parseRows: (rows) => productsFromTable(rows, rules),
+      makeCard: (c) => {
+        const d = existing().find((e) => norm(e.nombre) === norm(c.nombre)); const inc = el('input', { type: 'checkbox', checked: !d });
+        const prov = (c.proveedor && provs.find((p) => norm(p.nombre) === norm(c.proveedor))) || null;
+        const sel2 = (opts, val) => { const s = el('select', {}, ...opts.map(([k, l]) => el('option', { value: k, text: l }))); s.value = val ?? ''; return s; };
+        const f = { nombre: el('input', { value: c.nombre }), descripcion: el('textarea', { value: c.descripcion || '', style: 'min-height:50px' }), categoria: sel2([['', '—'], ...App.ESPECIALIDADES], c.categoria), unidad: el('input', { value: c.unidad || 'und' }),
+          costo: el('input', { type: 'number', step: 'any', min: '0', value: c.costo_ref ?? '' }), moneda: sel2([['USD', 'USD'], ['PAB', 'PAB']], c.moneda), prov: sel2([['', '— usar el de arriba —'], ...provs.map((p) => [p.id, p.nombre])], prov ? prov.id : '') };
+        const node = el('div', { class: 'row-card' }, el('div', { class: 'head' }, el('label', { class: 'check' }, inc, el('b', { text: c.nombre })), d ? App.badge('Ya existe', 'warn') : App.badge('Nuevo', 'ok'), c.proveedor && !prov ? App.badge(`Proveedor “${c.proveedor}” no registrado`, 'warn') : null),
+          el('div', { class: 'grid2' }, fld('Nombre del producto *', f.nombre), fld('Categoría', f.categoria), fld('Unidad', f.unidad), fld('Costo de referencia', f.costo), fld('Moneda', f.moneda), fld('Proveedor habitual', f.prov)), fld('Descripción', f.descripcion));
+        return { node, get: () => (inc.checked ? { nombre: f.nombre.value.trim(), categoria: f.categoria.value || null, unidad: f.unidad.value.trim() || 'und', descripcion: f.descripcion.value.trim() || null, costo_ref: f.costo.value === '' ? null : Math.max(0, Number(f.costo.value) || 0),
+          moneda: f.moneda.value, proveedor_id: f.prov.value || provAll.value || null, activo: true } : null) };
+      }
+    });
   };
 })();

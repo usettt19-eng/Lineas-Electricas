@@ -92,7 +92,7 @@
     async render(main) {
       const q = el('input', { class: 'grow', type: 'search', placeholder: 'Buscar cliente…' });
       const body = el('div', { class: 'table-wrap' });
-      main.replaceChildren(el('div', { class: 'toolbar' }, q, el('button', { class: 'btn', type: 'button', text: '+ Nuevo cliente', onclick: () => App.clienteForm(null, () => App.views.clientes.render(main)) })), body);
+      main.replaceChildren(el('div', { class: 'toolbar' }, q, el('button', { class: 'btn ghost', type: 'button', text: 'Pegar / importar', title: 'Pega el texto copiado de la web o importa un Excel', onclick: () => App.importClientes(() => App.views.clientes.render(main)) }), el('button', { class: 'btn', type: 'button', text: '+ Nuevo cliente', onclick: () => App.clienteForm(null, () => App.views.clientes.render(main)) })), body);
       await App.guard(async () => {
         await App.loadDirs(true);
         const [cots, proformas, movs] = await Promise.all([App.get('cotizaciones', 'select=id,cliente_id,estado'), App.get('proformas', 'select=cotizacion_id,estado,total'), App.get('movimientos', "tipo=eq.cobro&select=cliente_id,monto")]);
@@ -230,7 +230,7 @@
       const q = el('input', { class: 'grow', type: 'search', placeholder: 'Buscar producto…' });
       const cat = el('select', {}, el('option', { value: '', text: 'Todas las categorías' }), ...App.ESPECIALIDADES.map(([k, l]) => el('option', { value: k, text: l })));
       const inact = el('input', { type: 'checkbox' }); const body = el('div', { class: 'table-wrap' });
-      main.replaceChildren(el('div', { class: 'toolbar' }, q, cat, el('label', { class: 'check' }, inact, 'Ver inactivos'), el('button', { class: 'btn', type: 'button', text: '+ Nuevo producto', onclick: () => productoForm(null, draw) })), body);
+      main.replaceChildren(el('div', { class: 'toolbar' }, q, cat, el('label', { class: 'check' }, inact, 'Ver inactivos'), el('button', { class: 'btn ghost', type: 'button', text: 'Pegar / importar', title: 'Pega una lista de productos o importa un Excel', onclick: () => App.importProductos(draw) }), el('button', { class: 'btn', type: 'button', text: '+ Nuevo producto', onclick: () => productoForm(null, draw) })), body);
       function draw() {
         const t = q.value.trim().toLowerCase();
         const rows = (App.cache.productos || []).filter((p) => (inact.checked || p.activo) && (!cat.value || p.categoria === cat.value) && (!t || [p.nombre, p.descripcion].some((v) => (v || '').toLowerCase().includes(t))));

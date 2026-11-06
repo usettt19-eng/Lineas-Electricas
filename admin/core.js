@@ -301,7 +301,7 @@
     for (let i = 0; i < text.length; i++) {
       const c = text[i];
       if (q) { if (c === '"') { if (text[i + 1] === '"') { cur += '"'; i++; } else q = false; } else cur += c; }
-      else if (c === '"') q = true;
+      else if (c === '"' && cur === '') q = true; // las comillas solo abren un campo entrecomillado si están al inicio (pulgadas: 3/8")
       else if (c === delim) { row.push(cur); cur = ''; }
       else if (c === '\n' || c === '\r') { if (c === '\r' && text[i + 1] === '\n') i++; row.push(cur); cur = ''; rows.push(row); row = []; }
       else cur += c;
