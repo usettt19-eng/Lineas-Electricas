@@ -117,7 +117,7 @@
   });
 
   /* ---------------- Directorios de proveedores y transportistas ---------------- */
-  function directory({ table, cache, tagKey, tagLabel, tagOptions, singular, extraFields }) {
+  function directory({ table, cache, tagKey, tagLabel, tagOptions, singular, plural, rules, extraFields }) {
     const fields = [
       { k: 'nombre', label: 'Nombre de la empresa', required: true }, { k: 'contacto', label: 'Persona de contacto' },
       { k: 'correo', label: 'Correo', type: 'email' }, { k: 'telefono', label: 'Teléfono' },
@@ -140,6 +140,7 @@
       const inact = el('input', { type: 'checkbox' });
       const body = el('div', { class: 'table-wrap' });
       container.replaceChildren(el('div', { class: 'toolbar' }, q, tagSel, el('label', { class: 'check' }, inact, 'Ver inactivos'),
+        el('button', { class: 'btn ghost', type: 'button', text: 'Pegar / importar', title: 'Pega el texto copiado de la web o importa un Excel', onclick: () => App.pasteImport({ table, cache, singular, plural, tagKey, tagLabel, tagOptions, rules, onDone: draw }) }),
         el('button', { class: 'btn', type: 'button', text: `+ Nuevo ${singular}`, onclick: () => edit(null, draw) })), body);
       function draw() {
         const t = q.value.trim().toLowerCase();
@@ -156,7 +157,7 @@
     };
   }
 
-  const renderProveedores = directory({ table: 'proveedores', cache: 'proveedores', tagKey: 'especialidades', tagLabel: 'Especialidades', tagOptions: App.ESPECIALIDADES, singular: 'proveedor', extraFields: [] });
+  const renderProveedores = directory({ table: 'proveedores', cache: 'proveedores', tagKey: 'especialidades', tagLabel: 'Especialidades', tagOptions: App.ESPECIALIDADES, singular: 'proveedor', plural: 'proveedores', rules: App.IMPORT_RULES.proveedores, extraFields: [] });
 
   /* Pipeline de ofertas de proveedores */
   async function renderOfertas(container) {
@@ -198,7 +199,7 @@
   });
 
   const renderTransportistas = directory({
-    table: 'transportistas', cache: 'transportistas', tagKey: 'modalidades', tagLabel: 'Modalidades', tagOptions: App.MODALIDADES, singular: 'transportista',
+    table: 'transportistas', cache: 'transportistas', tagKey: 'modalidades', tagLabel: 'Modalidades', tagOptions: App.MODALIDADES, singular: 'transportista', plural: 'transportistas', rules: App.IMPORT_RULES.transportistas,
     extraFields: [{ k: 'cobertura', label: 'Cobertura / rutas', type: 'textarea', placeholder: 'Ej. China → Colón (marítimo), Miami → Panamá (aéreo)…' }]
   });
   App.register('transportistas', 'Transportistas', { render: (main) => renderTransportistas(main) });
