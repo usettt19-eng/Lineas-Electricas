@@ -11,19 +11,17 @@
   const toBlob = (canvas, type, q) => new Promise((res) => canvas.toBlob(res, type, q));
 
   // ---------- PDF (pdf.js incluido localmente) ----------
+  // pdf.js 4.x (versión sin el fallo CVE-2024-4367); el PDF viene de terceros (proveedores), por eso se desactiva el uso de eval
   function loadPdfLib() {
-    if (window.pdfjsLib) return Promise.resolve(window.pdfjsLib);
     if (!App._pdf) {
-      App._pdf = new Promise((res, rej) => {
-        const s = el('script', { src: 'vendor/pdf.min.js' });
-        s.onload = () => { window.pdfjsLib.GlobalWorkerOptions.workerSrc = 'vendor/pdf.worker.min.js'; res(window.pdfjsLib); };
-        s.onerror = () => { App._pdf = null; rej(new Error('pdfjs')); };
-        document.head.append(s);
-      });
+      App._pdf = import('./vendor/pdf.esm.min.js').then((lib) => {
+        lib.GlobalWorkerOptions.workerSrc = new URL('vendor/pdf.worker.esm.min.js', document.baseURI).href;
+        return lib;
+      }).catch(() => { App._pdf = null; throw new Error('pdfjs'); });
     }
     return App._pdf;
   }
-  async function openPdf(blob) { const lib = await loadPdfLib(); return lib.getDocument({ data: new Uint8Array(await blob.arrayBuffer()) }).promise; }
+  async function openPdf(blob) { const lib = await loadPdfLib(); return lib.getDocument({ data: new Uint8Array(await blob.arrayBuffer()), isEvalSupported: false, enableXfa: false }).promise; }
   async function pdfCover(blob) {
     const doc = await openPdf(blob); const page = await doc.getPage(1); const v0 = page.getViewport({ scale: 1 });
     const vp = page.getViewport({ scale: Math.min(2, 1400 / v0.width) }); const c = el('canvas'); c.width = Math.round(vp.width); c.height = Math.round(vp.height);

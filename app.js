@@ -187,6 +187,11 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   });
 
+  // Escapa texto antes de insertarlo como HTML (evita inyección de código desde campos del formulario o nombres de producto)
+  function escapeHtml(value) {
+    return String(value ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  }
+
   // 4. Selección de productos desde el catálogo hacia el formulario de cotización
   const selectedProducts = new Set();
   const selectedContainer = document.getElementById('selectedProductsContainer');
@@ -220,8 +225,14 @@ document.addEventListener('DOMContentLoaded', () => {
     selectedProducts.forEach((prodName) => {
       const tag = document.createElement('span');
       tag.className = 'selected-tag';
-      tag.innerHTML = `<span>${prodName}</span><button type="button" aria-label="Quitar ${prodName}">✕</button>`;
-      tag.querySelector('button').addEventListener('click', () => {
+      const label = document.createElement('span');
+      label.textContent = prodName;
+      const removeBtn = document.createElement('button');
+      removeBtn.type = 'button';
+      removeBtn.setAttribute('aria-label', `Quitar ${prodName}`);
+      removeBtn.textContent = '✕';
+      tag.append(label, removeBtn);
+      removeBtn.addEventListener('click', () => {
         selectedProducts.delete(prodName);
         document
           .querySelectorAll(`[data-select-product="${CSS.escape(prodName)}"]`)
@@ -399,6 +410,26 @@ document.addEventListener('DOMContentLoaded', () => {
   const MAX_FILE_BYTES = 10 * 1024 * 1024;
   const MIN_SECONDS_BETWEEN_SUBMITS = 20;
 
+  const ALLOWED_EXT = ['pdf', 'dwg', 'dxf', 'xlsx', 'xls', 'doc', 'docx', 'zip', 'jpg', 'jpeg', 'png'];
+  const MAX_FILES = 6;
+  const extOf = (n) => (String(n).split('.').pop() || '').toLowerCase();
+
+  // Comprueba la firma real del archivo (no solo el nombre) para rechazar archivos disfrazados
+  async function looksValid(file) {
+    const ext = extOf(file.name);
+    const h = new Uint8Array(await file.slice(0, 8).arrayBuffer());
+    const is = (...b) => b.every((v, i) => h[i] === v);
+    const text = String.fromCharCode(...h);
+    if (ext === 'pdf') return text.startsWith('%PDF');
+    if (ext === 'png') return is(0x89, 0x50, 0x4e, 0x47);
+    if (ext === 'jpg' || ext === 'jpeg') return is(0xff, 0xd8, 0xff);
+    if (['zip', 'xlsx', 'docx'].includes(ext)) return is(0x50, 0x4b);
+    if (['xls', 'doc'].includes(ext)) return is(0xd0, 0xcf, 0x11, 0xe0) || is(0x50, 0x4b);
+    if (ext === 'dwg') return text.startsWith('AC');
+    if (ext === 'dxf') return !h.includes(0) || text.startsWith('AutoCAD');
+    return false;
+  }
+
   function safeFileName(name) {
     return name
       .normalize('NFD')
@@ -428,34 +459,56 @@ document.addEventListener('DOMContentLoaded', () => {
       }
 
       const id = crypto.randomUUID();
-      const uploaded = [];
       const failedFiles = [];
+      const planned = [];
 
-      for (const [i, file] of Array.from(fileList || []).entries()) {
-        if (file.size > MAX_FILE_BYTES) {
-          failedFiles.push(`${file.name} (supera 10 MB)`);
+      // Se valida cada archivo antes de subirlo: tipo permitido, tamaño, cantidad y firma real del contenido
+      for (const file of Array.from(fileList || [])) {
+        if (planned.length >= MAX_FILES) {
+          failedFiles.push(`${file.name} (máximo ${MAX_FILES} archivos)`);
           continue;
         }
-        const path = `${id}/${i}_${safeFileName(file.name)}`;
-        try {
-          const res = await fetch(`${SUPABASE_URL}/storage/v1/object/adjuntos/${path}`, {
-            method: 'POST',
-            headers: sbHeaders({ 'Content-Type': file.type || 'application/octet-stream' }),
-            body: file
-          });
-          if (res.ok) uploaded.push({ path, nombre: file.name, bytes: file.size });
-          else failedFiles.push(file.name);
-        } catch (_) {
-          failedFiles.push(file.name);
+        if (!ALLOWED_EXT.includes(extOf(file.name))) {
+          failedFiles.push(`${file.name} (tipo de archivo no permitido)`);
+          continue;
         }
+        if (file.size === 0 || file.size > MAX_FILE_BYTES) {
+          failedFiles.push(`${file.name} (${file.size === 0 ? 'vacío' : 'supera 10 MB'})`);
+          continue;
+        }
+        if (!(await looksValid(file))) {
+          failedFiles.push(`${file.name} (el contenido no coincide con el tipo de archivo)`);
+          continue;
+        }
+        planned.push({ file, path: `${id}/${planned.length}_${safeFileName(file.name)}`, nombre: file.name, bytes: file.size });
       }
 
+      // Primero se registra la solicitud (la base la limita por visitante) y solo entonces se suben los archivos
       const res = await fetch(`${SUPABASE_URL}/rest/v1/cotizaciones`, {
         method: 'POST',
         headers: sbHeaders({ 'Content-Type': 'application/json', Prefer: 'return=minimal' }),
-        body: JSON.stringify({ id, ...row, archivos: uploaded })
+        body: JSON.stringify({ id, ...row, archivos: planned.map(({ path, nombre, bytes }) => ({ path, nombre, bytes })) })
       });
-      return { ok: res.ok, uploaded: uploaded.length, failedFiles };
+      if (!res.ok) {
+        const info = await res.json().catch(() => ({}));
+        return { ok: false, throttled: /Demasiadas/i.test(info.message || ''), uploaded: 0, failedFiles };
+      }
+
+      let uploaded = 0;
+      for (const p of planned) {
+        try {
+          const up = await fetch(`${SUPABASE_URL}/storage/v1/object/adjuntos/${p.path}`, {
+            method: 'POST',
+            headers: sbHeaders({ 'Content-Type': p.file.type || 'application/octet-stream' }),
+            body: p.file
+          });
+          if (up.ok) uploaded++;
+          else failedFiles.push(p.nombre);
+        } catch (_) {
+          failedFiles.push(p.nombre);
+        }
+      }
+      return { ok: true, uploaded, failedFiles };
     } catch (_) {
       return { ok: false, uploaded: 0, failedFiles: [] };
     }
@@ -523,12 +576,12 @@ document.addEventListener('DOMContentLoaded', () => {
       specFormFeedback.hidden = false;
       specFormFeedback.className = 'form-feedback success';
       specFormFeedback.innerHTML = `
-        <div>✓ <strong>Especificaciones registradas correctamente.</strong> Folio técnico generado para <strong>${voltage}</strong> (${length}).</div>
+        <div>✓ <strong>Especificaciones registradas correctamente.</strong> Folio técnico generado para <strong>${escapeHtml(voltage)}</strong> (${escapeHtml(length)}).</div>
         <div style="margin-top: 0.6rem; display: flex; gap: 0.6rem; flex-wrap: wrap;">
-          <a href="https://wa.me/${brand.whatsapp}?text=${waMessage}" target="_blank" rel="noopener noreferrer" class="btn btn-whatsapp btn-sm">
+          <a href="https://wa.me/${escapeHtml(String(brand.whatsapp).replace(/\D/g, ''))}?text=${waMessage}" target="_blank" rel="noopener noreferrer" class="btn btn-whatsapp btn-sm">
             Enviar resumen directo por WhatsApp →
           </a>
-          <a href="mailto:${brand.email}?subject=${encodeURIComponent('Cotización Línea Eléctrica ' + voltage + ' - ' + name)}&body=${waMessage}" class="btn btn-electric btn-sm">
+          <a href="mailto:${escapeHtml(brand.email)}?subject=${encodeURIComponent('Cotización Línea Eléctrica ' + voltage + ' - ' + name)}&body=${waMessage}" class="btn btn-electric btn-sm">
             Abrir en Correo Electrónico ✉
           </a>
         </div>
@@ -616,12 +669,12 @@ document.addEventListener('DOMContentLoaded', () => {
       contactFormFeedback.hidden = false;
       contactFormFeedback.className = 'form-feedback success';
       contactFormFeedback.innerHTML = `
-        <div>✓ <strong>¡Solicitud lista para atención prioritaria!</strong> Hemos preparado la orden de cotización de <strong>${data.company}</strong> para línea de <strong>${data.voltage}</strong> (${data.reqType} · Cambio de dirección: ${data.direction}).</div>
+        <div>✓ <strong>¡Solicitud lista para atención prioritaria!</strong> Hemos preparado la orden de cotización de <strong>${escapeHtml(data.company)}</strong> para línea de <strong>${escapeHtml(data.voltage)}</strong> (${escapeHtml(data.reqType)} · Cambio de dirección: ${escapeHtml(data.direction)}).</div>
         <div style="margin-top: 0.65rem; display: flex; gap: 0.6rem; flex-wrap: wrap;">
-          <a href="https://wa.me/${brand.whatsapp}?text=${waText}" target="_blank" rel="noopener noreferrer" class="btn btn-whatsapp btn-sm">
+          <a href="https://wa.me/${escapeHtml(String(brand.whatsapp).replace(/\D/g, ''))}?text=${waText}" target="_blank" rel="noopener noreferrer" class="btn btn-whatsapp btn-sm">
             Confirmar envío por WhatsApp →
           </a>
-          <a href="mailto:${brand.email}?subject=${encodeURIComponent('Solicitud de Cotización ' + data.voltage + ' - ' + data.company)}&body=${waText}" class="btn btn-electric btn-sm">
+          <a href="mailto:${escapeHtml(brand.email)}?subject=${encodeURIComponent('Solicitud de Cotización ' + data.voltage + ' - ' + data.company)}&body=${waText}" class="btn btn-electric btn-sm">
             Enviar por Correo Electrónico ✉
           </a>
         </div>

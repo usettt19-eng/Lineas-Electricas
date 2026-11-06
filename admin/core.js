@@ -121,8 +121,9 @@
       table{width:100%;border-collapse:collapse;margin-top:8px}th,td{border-bottom:1px solid #ddd;padding:6px 8px;text-align:left}th{background:#f3f3f3;font-size:11px;text-transform:uppercase}
       td.r,th.r{text-align:right}.head{display:flex;justify-content:space-between;border-bottom:3px solid #f57c00;padding-bottom:10px;margin-bottom:14px}
       .muted{color:#666}.tot td{font-weight:700;border-top:2px solid #111}pre{white-space:pre-wrap;font-family:inherit}@media print{button{display:none}}
-      </style></head><body>${bodyHtml}<p><button onclick="window.print()">Imprimir / Guardar PDF</button></p></body></html>`);
+      </style></head><body>${bodyHtml}<p><button id="printBtn">Imprimir / Guardar PDF</button></p></body></html>`);
     w.document.close();
+    const pb = typeof w.document.getElementById === 'function' ? w.document.getElementById('printBtn') : null; if (pb) pb.addEventListener('click', () => w.print());
   };
 
   // ---------- sesión y API ----------
@@ -312,10 +313,26 @@
   App.readTableFile = async (file) => {
     const ext = (file.name.split('.').pop() || '').toLowerCase();
     if (['csv', 'txt', 'tsv'].includes(ext)) return App.parseDelimited(await file.text());
-    const X = await App.loadSheetLib();
-    const wb = X.read(await file.arrayBuffer(), { type: 'array' });
-    return X.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header: 1, defval: '', blankrows: false }).map((r) => r.map((c) => (c === null ? '' : c)));
+    return parseInSandbox(await file.arrayBuffer());
   };
+  // Los Excel (xlsx/xls) vienen de terceros: se leen dentro de un iframe aislado, sin acceso a la sesión del panel
+  function parseInSandbox(buf) {
+    return new Promise((resolve, reject) => {
+      const frame = el('iframe', { src: 'vendor/xlsx-sandbox.html', sandbox: 'allow-scripts', style: 'display:none', 'aria-hidden': 'true', title: 'Lector de Excel aislado' });
+      let done = false; let timer = null;
+      const finish = (fn, v) => { if (done) return; done = true; clearTimeout(timer); window.removeEventListener('message', onMsg); frame.remove(); fn(v); };
+      const onMsg = (e) => {
+        if (e.source !== frame.contentWindow || !e.data) return;
+        if (e.data.type === 'ready') { frame.contentWindow.postMessage({ type: 'parse', buf }, '*', [buf]); return; }
+        if (e.data.type === 'rows') {
+          const rows = Array.isArray(e.data.rows) ? e.data.rows.slice(0, 5000).map((r) => (Array.isArray(r) ? r.slice(0, 60).map((c) => (typeof c === 'number' || typeof c === 'boolean' ? c : typeof c === 'string' ? c.slice(0, 500) : '')) : [])) : [];
+          finish(resolve, rows);
+        } else if (e.data.type === 'error') finish(reject, new Error('parse'));
+      };
+      timer = setTimeout(() => finish(reject, new Error('timeout')), 20000);
+      window.addEventListener('message', onMsg); document.body.append(frame);
+    });
+  }
   const norm = (s) => String(s ?? '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9#]+/g, ' ').trim();
   const HINTS = {
     codigo: ['item', 'codigo', 'cod', 'no', 'nro', 'numero', 'n', 'ref', 'referencia', '#'],
@@ -451,6 +468,7 @@
     catch (e) { try { await App.api(`/storage/v1/object/documentos/${enc}`, { method: 'DELETE' }); } catch (_) {} throw e; }
   };
   App.signDoc = async (path, seconds = 900) => {
+    if (typeof path !== 'string' || !/^[A-Za-z0-9_\-./]+$/.test(path) || path.includes('..')) throw new Error('ruta no válida');
     const s = await App.api(`/storage/v1/object/sign/documentos/${path.split('/').map(encodeURIComponent).join('/')}`, { method: 'POST', body: JSON.stringify({ expiresIn: seconds }) });
     return `${App.SUPABASE_URL}/storage/v1${s.signedURL}`;
   };

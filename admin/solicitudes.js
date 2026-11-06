@@ -59,10 +59,13 @@
   }
   async function signedLinks(archivos, into, onImport) {
     for (const f of archivos || []) {
+      // Los datos de adjuntos vienen del formulario público (no son confiables): se valida la ruta antes de firmar nada
+      if (!f || typeof f.path !== 'string' || !/^[0-9a-f-]{36}\/\d{1,2}_[A-Za-z0-9._-]{1,100}$/.test(f.path)) { into.append(el('div', { text: `${String((f && f.nombre) || 'archivo').slice(0, 80)} (ruta no válida)` })); continue; }
       try {
         const s = await App.api(`/storage/v1/object/sign/adjuntos/${f.path.split('/').map(encodeURIComponent).join('/')}`, { method: 'POST', body: JSON.stringify({ expiresIn: 600 }) });
-        const url = `${App.SUPABASE_URL}/storage/v1${s.signedURL}`;
-        into.append(el('div', { class: 'doc-row' }, el('a', { href: url, target: '_blank', rel: 'noopener', text: `${f.nombre} (${Math.max(1, Math.round(f.bytes / 1024))} KB)` }),
+        // &download= fuerza la descarga (el navegador nunca los muestra ni ejecuta dentro del panel)
+        const url = `${App.SUPABASE_URL}/storage/v1${s.signedURL}&download=${encodeURIComponent(String(f.nombre || 'archivo').slice(0, 100))}`;
+        into.append(el('div', { class: 'doc-row' }, el('a', { href: url, target: '_blank', rel: 'noopener', text: `${String(f.nombre || 'archivo').slice(0, 100)} (${Math.max(1, Math.round((Number(f.bytes) || 0) / 1024))} KB)` }),
           onImport && /\.(xlsx|xls|csv)$/i.test(f.nombre) ? el('button', { class: 'btn ghost small', type: 'button', text: 'Importar partidas', onclick: async () => { try { onImport(new File([await (await fetch(url)).blob()], f.nombre)); } catch (_) { App.toast('No se pudo abrir el archivo.'); } } }) : null));
       } catch (_) { into.append(el('div', { text: `${f.nombre} (no disponible)` })); }
     }
