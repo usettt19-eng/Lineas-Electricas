@@ -51,7 +51,7 @@
     const L = [`Estimados ${t ? t.contacto || t.nombre : 'transportistas'}:`, '', `Solicitamos cotización de flete para el siguiente embarque (ref. ${App.folio(r)}):`, ''];
     const line = (l, v) => v !== null && v !== undefined && v !== '' && L.push(`• ${l}: ${v}`);
     line('Modalidad', App.label(App.MODALIDADES, f.modalidad)); line('Origen', f.origen); line('Destino', f.destino);
-    line('Peso aproximado', f.peso_kg ? `${f.peso_kg} kg` : null); line('Volumen', f.volumen_m3 ? `${f.volumen_m3} m³` : null); line('Bultos', f.bultos);
+    line('Peso aproximado', f.peso_kg ? `${f.peso_kg} kg` : null); line('Volumen', f.volumen_m3 ? `${f.volumen_m3} m³` : null); line('Bultos', f.bultos); line('Embalaje', f.embalaje);
     line('Valor de la mercancía (FOB)', f.valor_fob_usd ? App.money(f.valor_fob_usd) : null);
     line('Carga', `Materiales para línea eléctrica de ${r.tension}${r.partidas ? ' — ' + r.partidas : ''}`);
     L.push('', `Favor cotizar de forma desglosada para condiciones ${f.incoterm || 'FOB'} y CIF: flete, seguro, gastos en origen, gastos en destino, tiempo de tránsito y validez de la oferta.`, '', 'Saludos cordiales,', sig());
@@ -416,12 +416,26 @@
       F[k] = ['peso_kg', 'volumen_m3', 'bultos', 'valor_fob_usd'].includes(k) ? App.num(i.value) : i.value.trim();
       if (k === 'modalidad') { D.modSel = i.value; drawList(); }
     }));
+    // Datos de embalaje: se pegan tal como los envía el proveedor y rellenan peso, bultos y volumen
+    if (!D.emb) D.emb = { text: '', descripcion: '', info: '' };
+    const embTa = el('textarea', { style: 'min-height:110px', value: D.emb.text, placeholder: 'Pega aquí el embalaje que te envió el proveedor, por ejemplo:\nPESO NETO: 216Kgs\nPESO BRUTO: 225Kgs\n# DE CAJAS DE CARTON: 5 cajas de cartón\nDIMENSIONES DE CADA CAJA: 51cms de largo X 43cms de ancho X 32cms de alto' });
+    const embInfo = el('div', { class: 'sub', text: D.emb.info });
+    const applyEmb = () => {
+      D.emb.text = embTa.value; const txt = embTa.value.trim();
+      if (!txt) { D.emb.descripcion = ''; D.emb.info = ''; embInfo.textContent = ''; return; }
+      const e = App.parseEmbalaje(txt);
+      if (!e) { D.emb.descripcion = ''; D.emb.info = 'No reconocí peso, bultos ni medidas en ese texto.'; embInfo.textContent = D.emb.info; return; }
+      ['peso_kg', 'volumen_m3', 'bultos'].forEach((k) => { if (e[k] !== null && e[k] !== undefined) { F[k] = e[k]; ins[k].value = e[k]; } });
+      D.emb.descripcion = e.descripcion; D.emb.info = `Detecté: ${e.resumen.join(' · ')}. Revisa los campos de arriba.`; embInfo.textContent = D.emb.info;
+    };
+    let embTimer; embTa.addEventListener('input', () => { clearTimeout(embTimer); embTimer = setTimeout(applyEmb, 350); });
+    const embBox = el('div', { style: 'margin-top:.8rem' }, field('Datos de embalaje (pégalos tal como los envía el proveedor)', embTa, 'Reconoce peso neto y bruto, número de cajas, bultos o pallets, medidas por bulto y volumen. Rellena peso, volumen y bultos solos; puedes corregirlos después.'), embInfo);
     const list = el('div');
     function drawList() {
       const cands = App.cache.transportistas.filter((t) => t.activo && (!D.modSel || (t.modalidades || []).includes(D.modSel)));
       if (!cands.length) return list.replaceChildren(el('div', { class: 'empty', text: App.cache.transportistas.length ? 'Ningún transportista activo cubre esa modalidad.' : 'Aún no hay transportistas. Agrégalos en la pestaña “Transportistas” del menú.' }));
       list.replaceChildren(...cands.map((t) => {
-        const sent = D.fletes.find((x) => x.transportista_id === t.id); const msg = () => fleteMessage(r, t, F);
+        const sent = D.fletes.find((x) => x.transportista_id === t.id); const msg = () => fleteMessage(r, t, { ...F, embalaje: D.emb && D.emb.descripcion });
         const go = (via) => {
           if (!F.origen || !F.destino) return App.toast('Indica origen y destino antes de enviar');
           const text = msg();
@@ -438,7 +452,7 @@
     async function register(t, via) {
       if (D.fletes.some((x) => x.transportista_id === t.id)) return;
       await App.guard(async () => {
-        D.fletes.push(await App.insert('cotizaciones_flete', { cotizacion_id: r.id, transportista_id: t.id, via, ...F }));
+        D.fletes.push(await App.insert('cotizaciones_flete', { cotizacion_id: r.id, transportista_id: t.id, via, ...F, notas: D.emb && D.emb.descripcion ? 'Embalaje: ' + D.emb.descripcion : null }));
         if (['nueva', 'en_revision'].includes(r.estado)) await setStage(D, 'cotizando'); renderDetail(D);
       });
     }
@@ -475,7 +489,7 @@
     return el('div', {},
       el('div', { class: 'box' }, el('h3', { text: 'Datos del embarque a cotizar' }), el('p', { class: 'sub', text: 'Estos datos van en el mensaje al transportista, que cotizará flete, seguro y gastos para condiciones FOB y CIF.' }),
         el('div', { class: 'grid4' }, field('Modalidad', ins.modalidad), field('Incoterm de referencia', ins.incoterm), field('Origen', ins.origen), field('Destino', ins.destino),
-          field('Peso (kg)', ins.peso_kg), field('Volumen (m³)', ins.volumen_m3), field('Bultos', ins.bultos), field('Valor FOB (USD)', ins.valor_fob_usd))),
+          field('Peso (kg)', ins.peso_kg), field('Volumen (m³)', ins.volumen_m3), field('Bultos', ins.bultos), field('Valor FOB (USD)', ins.valor_fob_usd)), embBox),
       el('div', { class: 'box' }, el('h3', { text: 'Enviar a transportistas' }), list),
       el('div', { class: 'box' }, el('h3', { text: 'Cotizaciones de flete recibidas' }), D.fletes.length ? cards : el('div', { class: 'empty', text: 'Aún no has pedido cotizaciones de flete.' })));
   }

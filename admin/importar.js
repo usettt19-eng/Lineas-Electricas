@@ -297,4 +297,45 @@
       }
     });
   };
+
+  /* ================= Embalaje: peso, bultos, medidas y volumen desde el texto del proveedor ================= */
+  const NUMX = '(\\d+(?:[.,]\\d+)*)';
+  const numE = (s) => { let t = String(s).trim(); if (t.includes(',') && t.includes('.')) t = t.replace(/,/g, ''); else if (/^\d{1,3}(,\d{3})+$/.test(t)) t = t.replace(/,/g, ''); else t = t.replace(',', '.'); const n = Number(t); return Number.isFinite(n) ? n : null; };
+  const toKg = (v, u) => (/^(lb|lbs|libras?)$/.test(u) ? v * 0.45359237 : /^(t|ton|tons|tonelada|toneladas)$/.test(u) ? v * 1000 : v);
+  const KG = '(kgs?|kilos?|kilogramos?|lbs?|libras?|tons?|toneladas?|t)\\b';
+  const PK = '(cajas?|bultos?|pallets?|paletas?|tarimas?|cartons?|ctns?|boxes|box|packages?|pkgs?|sacos?|rollos?|carretes?|reels?|drums?|tambores?|cajones|crates?)';
+  const UN = '(cms?|centimetros?|mm|milimetros?|mts?|metros?|m|pulgadas?|in)';
+  const r3 = (n) => Math.round(n * 1000) / 1000, r2e = (n) => Math.round(n * 100) / 100;
+  const UNIT_CM = (u) => (/^(mm|milimetros?)$/.test(u) ? 0.1 : /^(m|mt|mts|metros?)$/.test(u) ? 100 : /^(in|pulgadas?)$/.test(u) ? 2.54 : 1);
+
+  function parseEmbalajeBlock(raw) {
+    const t = raw.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase(); const orig = t.length === raw.length ? raw : t;
+    const grab = (labels) => { const m = t.match(new RegExp(`(?:${labels})\\s*[:=\\-]?\\s*${NUMX}\\s*${KG}`)); return m ? toKg(numE(m[1]), m[2]) : null; };
+    const neto = grab('peso\\s*neto|net\\s*weight|n\\.?\\s?w\\.?');
+    let bruto = grab('peso\\s*bruto|gross\\s*weight|g\\.?\\s?w\\.?'); if (bruto === null) bruto = grab('peso(?:\\s*total)?|(?<!net\\s)(?<!gross\\s)weight');
+    let bultos = null, tipo = null; let m = t.match(new RegExp(`(\\d+)\\s*(?:x\\s*)?${PK}(?:\\s+de\\s+[a-z]+)?`));
+    if (m) { bultos = parseInt(m[1], 10); tipo = orig.slice(m.index, m.index + m[0].length).trim(); } else { m = t.match(new RegExp(`${PK}[^\\d\\n]{0,30}[:=]\\s*(\\d+)`)); if (m) { bultos = parseInt(m[2], 10); tipo = `${bultos} ${m[1]}`; } }
+    let dims = null; const UO = `(?:${UN}(?![a-z]))?`; const dm = t.match(new RegExp(`${NUMX}\\s*${UO}[^x*×\\d\\n]{0,25}?[x×*]\\s*${NUMX}\\s*${UO}[^x*×\\d\\n]{0,25}?[x×*]\\s*${NUMX}\\s*${UO}`));
+    if (dm) { const v = [numE(dm[1]), numE(dm[3]), numE(dm[5])]; const u = dm[2] || dm[4] || dm[6]; const f = u ? UNIT_CM(u) : Math.max(...v) <= 5 ? 100 : 1; if (v.every((x) => x > 0)) dims = { l: r2e(v[0] * f), w: r2e(v[1] * f), h: r2e(v[2] * f) }; }
+    let volumen = null; const vm = t.match(new RegExp(`(?:volumen|volume|cbm|cubicaje)\\s*[:=\\-]?\\s*${NUMX}\\s*(m3|m³|cbm)?`)); if (vm) volumen = numE(vm[1]);
+    if (volumen === null && dims) volumen = (bultos || 1) * ((dims.l * dims.w * dims.h) / 1e6);
+    if (dims && bultos === null) bultos = 1;
+    const ok = [neto, bruto, bultos, dims, volumen].some((x) => x !== null);
+    return ok ? { neto, bruto, bultos, tipo, dims, volumen } : null;
+  }
+  /* Devuelve { peso_kg, peso_neto, bultos, volumen_m3, descripcion, resumen[] } o null si no reconoce nada */
+  App.parseEmbalaje = (text) => {
+    const raw = String(text || '').replace(/\r/g, '').trim(); if (!raw) return null;
+    const norm0 = raw.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase(); const cuts = [...norm0.matchAll(/^.*(?:se empacar|packing\s*:|packing list|empaque\s*:).*$/gm)].map((x) => x.index);
+    const pieces = cuts.length >= 2 && norm0.length === raw.length ? cuts.map((s, i) => raw.slice(s, cuts[i + 1] ?? raw.length)) : raw.split(/\n\s*\n+/);
+    const blocks = pieces.map(parseEmbalajeBlock).filter(Boolean); if (!blocks.length) return null;
+    const sum = (f) => blocks.reduce((s, b) => s + (f(b) || 0), 0); const has = (f) => blocks.some((b) => f(b) !== null && f(b) !== undefined);
+    const bruto = has((b) => b.bruto) || has((b) => b.neto) ? r2e(blocks.reduce((s, b) => s + (b.bruto ?? b.neto ?? 0), 0)) : null;
+    const neto = has((b) => b.neto) ? r2e(sum((b) => b.neto)) : null, bultos = has((b) => b.bultos) ? sum((b) => b.bultos) : null, vol = has((b) => b.volumen) ? r3(sum((b) => b.volumen)) : null;
+    const one = blocks.length === 1 ? blocks[0] : null; const dims = one && one.dims;
+    const partes = [one && one.tipo ? one.tipo : bultos ? `${bultos} bultos` : null, dims ? `de ${dims.l} × ${dims.w} × ${dims.h} cm` : null].filter(Boolean).join(' ');
+    const descripcion = [partes, neto !== null ? `peso neto ${neto} kg` : null, bruto !== null ? `peso bruto ${bruto} kg` : null, vol !== null ? `volumen ${vol} m³` : null].filter(Boolean).join('; ');
+    const resumen = [bruto !== null && `peso ${neto !== null ? 'bruto ' : ''}${bruto} kg`, neto !== null && `peso neto ${neto} kg`, bultos !== null && `${bultos} bulto(s)${one && one.tipo ? ' (' + one.tipo.replace(/^\d+\s*/, '') + ')' : ''}`, dims && `${dims.l} × ${dims.w} × ${dims.h} cm por bulto`, vol !== null && `volumen ${vol} m³`, blocks.length > 1 && `suma de ${blocks.length} productos`].filter(Boolean);
+    return { peso_kg: bruto, peso_neto: neto, bultos, volumen_m3: vol, descripcion, resumen };
+  };
 })();
