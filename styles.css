@@ -1928,3 +1928,6 @@ textarea {
   cursor: not-allowed;
   opacity: 0.65;
 }
+
+/* Los elementos marcados como ocultos deben seguir ocultos aunque su clase defina display */
+[hidden] { display: none !important; }

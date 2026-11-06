@@ -269,21 +269,10 @@ document.addEventListener('DOMContentLoaded', () => {
     btn.addEventListener('click', () => {
       const dir = btn.getAttribute('data-prefill-direction');
       const contactDirSelect = document.getElementById('contactDirection');
-      const specHorizontalInput = document.getElementById('specHorizontalAngle');
-      const specVerticalInput = document.getElementById('specVerticalChange');
 
-      if (dir === 'horizontal') {
-        if (contactDirSelect) contactDirSelect.value = 'Horizontal';
-        if (specHorizontalInput && !specHorizontalInput.value) {
-          specHorizontalInput.value = 'Requerimiento de estructuras de ángulo, aisladores de tensión y herrajes de anclaje';
-          specHorizontalInput.focus();
-        }
-      } else if (dir === 'vertical') {
-        if (contactDirSelect) contactDirSelect.value = 'Vertical';
-        if (specVerticalInput && !specVerticalInput.value) {
-          specVerticalInput.value = 'Requerimiento para desnivel vertical, grapas especiales, contrapesos y control de carga vertical';
-          specVerticalInput.focus();
-        }
+      if (contactDirSelect) {
+        if (dir === 'horizontal') contactDirSelect.value = 'Horizontal';
+        else if (dir === 'vertical') contactDirSelect.value = 'Vertical';
       }
     });
   });
@@ -501,16 +490,13 @@ document.addEventListener('DOMContentLoaded', () => {
       const length = document.getElementById('specLength').value.trim();
       const terrain = document.getElementById('specTerrain').value.trim();
       const structures = document.getElementById('specStructuresCount').value.trim();
-      const hAngle = document.getElementById('specHorizontalAngle').value.trim() || 'Por definir en plano';
-      const vChange = document.getElementById('specVerticalChange').value.trim() || 'Por definir en perfil';
-      const conductor = document.getElementById('specConductor').value.trim();
       const delivery = document.getElementById('specDeliveryDate').value || 'Inmediata / A convenir';
       const name = document.getElementById('specContactName').value.trim();
       const contact = document.getElementById('specContactInfo').value.trim();
       const filesInput = document.getElementById('specFiles');
       const attachedCount = filesInput && filesInput.files ? filesInput.files.length : 0;
 
-      if (!voltage || !length || !terrain || !structures || !conductor || !name || !contact) {
+      if (!voltage || !length || !terrain || !structures || !name || !contact) {
         specFormFeedback.hidden = false;
         specFormFeedback.className = 'form-feedback error';
         specFormFeedback.textContent =
@@ -529,9 +515,6 @@ document.addEventListener('DOMContentLoaded', () => {
           `• *Longitud aprox.:* ${length}\n` +
           `• *Terreno:* ${terrain}\n` +
           `• *Cant. estructuras:* ${structures}\n` +
-          `• *Ángulo horizontal:* ${hAngle}\n` +
-          `• *Desnivel vertical:* ${vChange}\n` +
-          `• *Conductor:* ${conductor}\n` +
           `• *Entrega estimada:* ${delivery}\n` +
           `• *Partidas:* ${catalogList}\n` +
           `• *Archivos adjuntos:* ${attachedCount} archivo(s)`
@@ -564,9 +547,6 @@ document.addEventListener('DOMContentLoaded', () => {
           longitud: length,
           terreno: terrain,
           cant_estructuras: structures,
-          angulo_horizontal: document.getElementById('specHorizontalAngle').value.trim() || null,
-          desnivel_vertical: document.getElementById('specVerticalChange').value.trim() || null,
-          conductor,
           fecha_entrega: document.getElementById('specDeliveryDate').value || null,
           partidas: selectedProducts.size > 0 ? Array.from(selectedProducts).join(', ') : null
         },
