@@ -224,7 +224,7 @@ document.addEventListener('DOMContentLoaded', () => {
       tag.querySelector('button').addEventListener('click', () => {
         selectedProducts.delete(prodName);
         document
-          .querySelectorAll(`[data-select-product="${prodName}"]`)
+          .querySelectorAll(`[data-select-product="${CSS.escape(prodName)}"]`)
           .forEach((btn) => {
             btn.classList.remove('added');
             btn.textContent = 'Incluir en cotización +';
@@ -235,18 +235,17 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
-  document.querySelectorAll('[data-select-product]').forEach((btn) => {
+  function bindSelectButton(btn) {
     btn.addEventListener('click', () => {
       const prod = btn.getAttribute('data-select-product');
-      if (selectedProducts.has(prod)) {
-        selectedProducts.delete(prod);
-        btn.classList.remove('added');
-        btn.textContent = 'Incluir en cotización +';
-      } else {
-        selectedProducts.add(prod);
-        btn.classList.add('added');
-        btn.textContent = '✓ Incluido en cotización';
-      }
+      const adding = !selectedProducts.has(prod);
+      if (adding) selectedProducts.add(prod);
+      else selectedProducts.delete(prod);
+      // se actualizan todos los botones del mismo producto (tarjeta, tienda y ficha)
+      document.querySelectorAll(`[data-select-product="${CSS.escape(prod)}"]`).forEach((b) => {
+        b.classList.toggle('added', adding);
+        b.textContent = adding ? '✓ Incluido en cotización' : 'Incluir en cotización +';
+      });
       renderSelectedProducts();
 
       // También sincronizar con la descripción del formulario de contacto si está vacía o agregando líneas
@@ -262,7 +261,8 @@ document.addEventListener('DOMContentLoaded', () => {
         }
       }
     });
-  });
+  }
+  document.querySelectorAll('[data-select-product]').forEach(bindSelectButton);
 
   // 5. Botones de prellenado para Cambio de Dirección Horizontal / Vertical (Sección 5)
   document.querySelectorAll('[data-prefill-direction]').forEach((btn) => {
@@ -764,4 +764,161 @@ document.addEventListener('DOMContentLoaded', () => {
     .catch(() => {
       // Sin conexión con Supabase: se mantienen los valores por defecto / caché
     });
+
+  // 11. Tienda virtual: productos publicados en Supabase (tabla `productos`, bucket público `catalogo`).
+  // Se llena sola con lo que se publica desde /admin; nunca incluye costos ni proveedores.
+  (function initStore() {
+    const section = document.getElementById('tienda');
+    const grid = document.getElementById('storeGrid');
+    const filterBar = document.getElementById('storeFilters');
+    if (!section || !grid || !filterBar) return;
+    const BASE = `${SUPABASE_URL}/storage/v1/object/public/catalogo/`;
+    const GROUPS = {
+      conductores: 'Conductores y OPGW', opgw: 'Conductores y OPGW', estructuras: 'Estructuras y Cimentación', aislamiento: 'Aisladores y Herrajes',
+      proteccion: 'Protección y Tendido', tendido: 'Protección y Tendido', transformadores: 'Transformadores', alumbrado: 'Alumbrado Público', otros: 'Otros'
+    };
+    const groupOf = (p) => GROUPS[p.categoria] || 'Otros';
+    const fileUrl = (p) => (typeof p === 'string' && /^[\w\-./]+$/.test(p) && !p.includes('..') ? BASE + p.split('/').map(encodeURIComponent).join('/') : null);
+    const mk = (tag, cls, text) => {
+      const n = document.createElement(tag);
+      if (cls) n.className = cls;
+      if (text !== undefined) n.textContent = text;
+      return n;
+    };
+    const specsOf = (p) => (Array.isArray(p.especificaciones) ? p.especificaciones : []).filter((s) => s && typeof s.k === 'string' && typeof s.v === 'string' && s.k.trim() && s.v.trim());
+
+    function quoteButton(p) {
+      const b = mk('button', 'pc-quote-btn', selectedProducts.has(p.nombre) ? '✓ Incluido en cotización' : 'Incluir en cotización +');
+      b.type = 'button';
+      if (selectedProducts.has(p.nombre)) b.classList.add('added');
+      b.setAttribute('data-select-product', p.nombre);
+      bindSelectButton(b);
+      return b;
+    }
+
+    let modal = null;
+    const closeFicha = () => {
+      if (modal) modal.hidden = true;
+      document.body.classList.remove('no-scroll');
+    };
+    function openFicha(p) {
+      if (!modal) {
+        modal = mk('div', 'store-modal');
+        modal.hidden = true;
+        modal.setAttribute('role', 'dialog');
+        modal.setAttribute('aria-modal', 'true');
+        modal.addEventListener('click', (e) => {
+          if (e.target === modal) closeFicha();
+        });
+        document.addEventListener('keydown', (e) => {
+          if (e.key === 'Escape' && !modal.hidden) closeFicha();
+        });
+        document.body.appendChild(modal);
+      }
+      const box = mk('div', 'store-dialog');
+      const close = mk('button', 'store-close', '✕');
+      close.type = 'button';
+      close.setAttribute('aria-label', 'Cerrar');
+      close.addEventListener('click', closeFicha);
+      const left = mk('div', 'store-dialog-img');
+      const img = fileUrl(p.imagen_path);
+      if (img) {
+        const i = mk('img');
+        i.src = img;
+        i.alt = p.nombre;
+        left.append(i);
+      } else left.append(mk('span', 'store-noimg', p.nombre.slice(0, 1).toUpperCase()));
+      const right = mk('div', 'store-dialog-body');
+      right.append(mk('span', 'store-cat', groupOf(p)), mk('h3', 'store-title', p.nombre));
+      if (p.descripcion) right.append(mk('p', 'store-desc', p.descripcion));
+      const specs = specsOf(p);
+      if (specs.length) {
+        const t = mk('table', 'store-specs');
+        specs.forEach((s) => {
+          const tr = mk('tr');
+          tr.append(mk('th', '', s.k), mk('td', '', s.v));
+          t.append(tr);
+        });
+        right.append(t);
+      }
+      const actions = mk('div', 'store-actions');
+      const pdf = fileUrl(p.ficha_path);
+      if (pdf) {
+        const a = mk('a', 'btn btn-amber btn-sm', 'Descargar ficha técnica (PDF)');
+        a.href = pdf;
+        a.target = '_blank';
+        a.rel = 'noopener noreferrer';
+        actions.append(a);
+      }
+      actions.append(quoteButton(p));
+      right.append(actions);
+      box.append(close, left, right);
+      modal.replaceChildren(box);
+      modal.hidden = false;
+      document.body.classList.add('no-scroll');
+    }
+
+    function card(p) {
+      const art = mk('article', 'store-card');
+      art.dataset.group = groupOf(p);
+      const fig = mk('div', 'store-img');
+      const img = fileUrl(p.imagen_path);
+      if (img) {
+        const i = mk('img');
+        i.src = img;
+        i.alt = p.nombre;
+        i.loading = 'lazy';
+        fig.append(i);
+      } else fig.append(mk('span', 'store-noimg', p.nombre.slice(0, 1).toUpperCase()));
+      fig.addEventListener('click', () => openFicha(p));
+      const body = mk('div', 'store-body');
+      body.append(mk('span', 'store-cat', groupOf(p)), mk('h3', 'store-title', p.nombre));
+      const specs = specsOf(p).slice(0, 3);
+      if (specs.length) {
+        const ul = mk('ul', 'store-specs-mini');
+        specs.forEach((s) => {
+          const li = mk('li');
+          li.append(mk('b', '', s.k + ': '), document.createTextNode(s.v));
+          ul.append(li);
+        });
+        body.append(ul);
+      } else if (p.descripcion) body.append(mk('p', 'store-desc', p.descripcion.length > 120 ? p.descripcion.slice(0, 117) + '…' : p.descripcion));
+      const actions = mk('div', 'store-actions');
+      const ver = mk('button', 'btn btn-outline-dark btn-sm', 'Ver ficha');
+      ver.type = 'button';
+      ver.addEventListener('click', () => openFicha(p));
+      actions.append(ver, quoteButton(p));
+      body.append(actions);
+      art.append(fig, body);
+      return art;
+    }
+
+    function render(items) {
+      if (!Array.isArray(items) || !items.length) return; // sin productos publicados la sección sigue oculta
+      section.hidden = false;
+      const groups = [...new Set(items.map(groupOf))];
+      const chip = (label, key) => {
+        const c = mk('button', 'filter-chip' + (key === 'all' ? ' active' : ''), label);
+        c.type = 'button';
+        c.addEventListener('click', () => {
+          filterBar.querySelectorAll('.filter-chip').forEach((x) => x.classList.remove('active'));
+          c.classList.add('active');
+          grid.querySelectorAll('.store-card').forEach((a) => {
+            a.style.display = key === 'all' || a.dataset.group === key ? '' : 'none';
+          });
+        });
+        return c;
+      };
+      filterBar.replaceChildren(chip(`Todos (${items.length})`, 'all'), ...groups.map((g) => chip(g, g)));
+      filterBar.hidden = groups.length < 2;
+      grid.replaceChildren(...items.map(card));
+    }
+
+    fetch(`${SUPABASE_URL}/rest/v1/productos?select=id,nombre,categoria,unidad,descripcion,imagen_path,ficha_path,ficha_nombre,especificaciones,orden&order=orden.asc,nombre.asc`, {
+      headers: { apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${SUPABASE_ANON_KEY}` }
+    })
+      .then((r) => (r.ok ? r.json() : []))
+      .then(render)
+      .catch(() => {});
+  })();
 });

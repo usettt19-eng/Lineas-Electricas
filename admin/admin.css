@@ -114,3 +114,7 @@ textarea.mono { font-family: ui-monospace, Menlo, Consolas, monospace; font-size
 .doc-row:last-child { border-bottom: 0; } .doc-row .grow { flex: 1; min-width: 160px; }
 .upload-bar { display: flex; flex-wrap: wrap; gap: .5rem; align-items: center; margin-top: .6rem; } .upload-bar select, .upload-bar input[type=text] { width: auto; }
 #modal2 { z-index: 40; }
+
+.ficha-img { width: 100%; max-width: 420px; aspect-ratio: 4 / 3; border: 1px dashed var(--line); border-radius: 10px; display: grid; place-items: center; overflow: hidden; background: color-mix(in srgb, var(--line) 30%, transparent); margin-bottom: .5rem; }
+.ficha-img img { width: 100%; height: 100%; object-fit: contain; background: #fff; }
+.thumb { width: 44px; height: 44px; object-fit: cover; border-radius: 6px; vertical-align: middle; margin-right: .6rem; background: #fff; border: 1px solid var(--line); }
