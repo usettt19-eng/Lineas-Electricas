@@ -1,0 +1,656 @@
+/**
+ * LÍNEAS ELÉCTRICAS 13.8 kV, 34.5 kV, 115 kV y 230 kV
+ * Lógica interactiva de catálogo, especificaciones por nivel de tensión,
+ * formularios de cotización, carga de archivos y personalización de marca.
+ */
+
+const VOLTAGE_SPECIFICATIONS = {
+  '13.8 kV': {
+    title: 'Especificaciones de Suministro — Líneas de 13.8 kV',
+    category: 'MEDIA TENSIÓN · DISTRIBUCIÓN PRIMARIA',
+    summary:
+      'Materiales para líneas de distribución primaria: postes, crucetas, aisladores, conductores, herrajes, apartarrayos, puesta a tierra y accesorios.',
+    conductors: [
+      'Conductores desnudos ACSR ( calibres 1/0 AWG Raven a 336.4 kcmil Linnet ) y AAAC',
+      'Cable semiaislado / ecológico para zonas arboladas cuando se especifique',
+      'Alambre de amarre de aluminio suave y varillas de armar preformadas'
+    ],
+    structures: [
+      'Postes de concreto reforzado (PC 11-500, 12-750, 13-600), madera y acero',
+      'Crucetas de acero galvanizado (tipo PR, PT, PV), madera tratada o poliméricas',
+      'Bastidores, abrazaderas, tirantes planos y angulares galvanizados'
+    ],
+    insulationAndHardware: [
+      'Aisladores tipo alfiler (pin), tipo poste (13PD / 15 kV) y suspensión poliméricos o porcelana ANSI',
+      'Grapas de remate de aluminio/hierro dúctil, guardacabos, pernos ojo y tuercas de ojo',
+      'Retenidas completas para estructuras de ángulo horizontal y remate'
+    ],
+    protection: [
+      'Cortacircuitos fusibles de expulsión (15 kV, 100A / 200A) y cuchillas monopolar/tripolar',
+      'Apartarrayos poliméricos de óxido de zinc (ZnO) clase distribución (10 kV / 12 kV)',
+      'Sistemas de puesta a tierra con electrodo Copperweld y conectores bimetálicos'
+    ]
+  },
+  '34.5 kV': {
+    title: 'Especificaciones de Suministro — Líneas de 34.5 kV',
+    category: 'MEDIA TENSIÓN · SUBTRANSMISIÓN Y DISTRIBUCIÓN',
+    summary:
+      'Suministro para subtransmisión y distribución: postes reforzados, aisladores, conductores, cables de guarda, estructuras de ángulo y herrajes.',
+    conductors: [
+      'Conductores de fase ACSR y AAAC (266.8 Partridge, 336.4 Linnet, 477 Hawk)',
+      'Cable de guarda de acero galvanizado EHS (5/16", 3/8") o ACS para blindaje',
+      'Empalmes a compresión de tensión completa y conectores de derivación'
+    ],
+    structures: [
+      'Postes de concreto reforzado de alta carga (13 m, 14 m, 15 m) y postes de acero',
+      'Estructuras tipo TS, TD, TR y estructuras de ángulo horizontal y desnivel vertical',
+      'Crucetas metálicas reforzadas y bayonetas para hilo de guarda'
+    ],
+    insulationAndHardware: [
+      'Aisladores tipo Line Post (35 kV ANSI 57-2 / 57-3) y cadenas de suspensión/tensión',
+      'Herrajes de retención para cambios de dirección horizontal y grapas de alto ángulo vertical',
+      'Anclas de expansión, pernos de anclaje y cable de retenida de alta resistencia'
+    ],
+    protection: [
+      'Apartarrayos clase distribución pesada / intermedia para 34.5 kV (27 kV / 30 kV)',
+      'Seccionadores bajo carga, reconectadores automáticos y cortacircuitos de 38 kV',
+      'Amortiguadores de vibración y desviadores de vuelo para protección de avifauna'
+    ]
+  },
+  '115 kV': {
+    title: 'Especificaciones de Suministro — Líneas de 115 kV',
+    category: 'ALTA TENSIÓN · SUBTRANSMISIÓN Y TRANSMISIÓN',
+    summary:
+      'Estructuras, torres, cadenas de aisladores, conductores, cables de guarda, herrajes, anclajes, cimentaciones y equipos de línea.',
+    conductors: [
+      'Conductores ACSR, AAAC y ACSS (477 Hawk, 795 Drake, 954 Rail, 1113 Bluejay)',
+      'Cables de guarda EHS / Alumoweld y cable óptico OPGW de 24 a 48 fibras',
+      'Cajas de empalme óptico, bajantes, grapas guía y herrajes preformados para OPGW'
+    ],
+    structures: [
+      'Torres de celosía de acero galvanizado (suspensión, ángulo pequeño/mediano/grande y remate)',
+      'Postes metálicos troncocónicos autosoportados o bridados para zonas urbanas e industriales',
+      'Stubs de cimentación, plantillas y pernos de anclaje en acero de alta fluencia'
+    ],
+    insulationAndHardware: [
+      'Cadenas de aisladores de vidrio templado, porcelana (ANSI 52-3 / 52-5) o poliméricos de 115 kV',
+      'Conjuntos completos de herrajes de suspensión y tensión (70 kN, 120 kN, 160 kN)',
+      'Contrapesos para control de carga vertical en desniveles y grapas de compresión'
+    ],
+    protection: [
+      'Amortiguadores tipo Stockbridge sintonizados para conductor de fase y cable de guarda',
+      'Apartarrayos de línea (TLA) de 115 kV y anillos de control de efecto corona',
+      'Esferas de señalización aeronáutica, placas de peligro y mallas de puesta a tierra por torre'
+    ]
+  },
+  '230 kV': {
+    title: 'Especificaciones de Suministro — Líneas de 230 kV',
+    category: 'ALTA TENSIÓN · TRANSMISIÓN TRONCAL DE GRAN POTENCIA',
+    summary:
+      'Torres autosoportadas, postes tubulares, conductores de gran capacidad, OPGW, cadenas de aisladores, herrajes de alta resistencia y sistemas de protección.',
+    conductors: [
+      'Conductores de gran capacidad en configuración simple o en haz (2x o 3x por fase): ACSR 795 Drake, 954, 1113',
+      'Cable de guarda OPGW de alta capacidad de cortocircuito y segundo hilo de guarda ACS/EHS',
+      'Empalmes y terminales a compresión para alta tensión con acabado libre de efecto corona'
+    ],
+    structures: [
+      'Torres autosoportadas de celosía para simple y doble circuito (tangente, deflexión horizontal y terminal)',
+      'Postes tubulares de acero de gran altura para cruces especiales, ríos y derechos de vía restringidos',
+      'Anclajes profundos, parrillas metálicas y herrajes estructurales de alta resistencia'
+    ],
+    insulationAndHardware: [
+      'Cadenas sencillas, dobles en "I" y cadenas en "V" (120 kN, 160 kN, 210 kN) de vidrio, porcelana o silicona',
+      'Yugos triangulares/rectangulares, anillos anticorona y raquetas de guarda',
+      'Separadores-amortiguadores (spacer-dampers) para conductores en haz y contrapesos para cambios de cota'
+    ],
+    protection: [
+      'Sistemas de puesta a tierra de contrapeso continuo y electrodos profundos de baja impedancia',
+      'Balizamiento diurno/nocturno para vanos de cruce de cañones y carreteras',
+      'Lotes completos de accesorios de tendido y mantenimiento para líneas de 230 kV'
+    ]
+  }
+};
+
+const DEFAULT_BRAND_CONFIG = {
+  name: 'Use Union de Servicios Especializados',
+  contact: 'Ing. Ruben Suarez',
+  phone: '+507 432-0507',
+  whatsapp: '5074320507',
+  email: 'info@useservices.company',
+  address: 'Av. Aquilino de la Guardia - PH Ocean Business - Piso 19, Bella Vista, Panamá'
+};
+
+document.addEventListener('DOMContentLoaded', () => {
+  // Año actual en el pie de página
+  const yearEl = document.getElementById('currentYear');
+  if (yearEl) {
+    yearEl.textContent = new Date().getFullYear();
+  }
+
+  // 1. Menú móvil responsivo
+  const mobileMenuBtn = document.getElementById('mobileMenuBtn');
+  const mainNav = document.getElementById('mainNav');
+  if (mobileMenuBtn && mainNav) {
+    mobileMenuBtn.addEventListener('click', () => {
+      const isOpen = mainNav.classList.toggle('open');
+      mobileMenuBtn.setAttribute('aria-expanded', String(isOpen));
+    });
+
+    mainNav.querySelectorAll('a').forEach((link) => {
+      link.addEventListener('click', () => {
+        mainNav.classList.remove('open');
+        mobileMenuBtn.setAttribute('aria-expanded', 'false');
+      });
+    });
+  }
+
+  // 2. Resaltado activo en navegación al hacer scroll
+  const sections = document.querySelectorAll('main section[id]');
+  const navLinks = document.querySelectorAll('.nav-link');
+
+  window.addEventListener(
+    'scroll',
+    () => {
+      const scrollPos = window.scrollY + 140;
+      sections.forEach((sec) => {
+        const top = sec.offsetTop;
+        const height = sec.offsetHeight;
+        const id = sec.getAttribute('id');
+        if (scrollPos >= top && scrollPos < top + height) {
+          navLinks.forEach((link) => {
+            link.classList.toggle('active', link.getAttribute('href') === `#${id}`);
+          });
+        }
+      });
+    },
+    { passive: true }
+  );
+
+  // 3. Filtrado de categorías de productos (Sección 4)
+  const filterChips = document.querySelectorAll('.filter-chip');
+  const productCards = document.querySelectorAll('.product-card');
+
+  filterChips.forEach((chip) => {
+    chip.addEventListener('click', () => {
+      const filter = chip.getAttribute('data-filter');
+      filterChips.forEach((c) => c.classList.remove('active'));
+      chip.classList.add('active');
+
+      productCards.forEach((card) => {
+        const cat = card.getAttribute('data-category');
+        if (filter === 'all' || cat === filter) {
+          card.style.display = 'flex';
+        } else {
+          card.style.display = 'none';
+        }
+      });
+    });
+  });
+
+  // 4. Selección de productos desde el catálogo hacia el formulario de cotización
+  const selectedProducts = new Set();
+  const selectedContainer = document.getElementById('selectedProductsContainer');
+  const selectedList = document.getElementById('selectedProductsList');
+  const contactDescription = document.getElementById('contactDescription');
+
+  function renderSelectedProducts() {
+    if (!selectedContainer || !selectedList) return;
+    selectedList.innerHTML = '';
+    if (selectedProducts.size === 0) {
+      selectedContainer.hidden = true;
+      return;
+    }
+    selectedContainer.hidden = false;
+    selectedProducts.forEach((prodName) => {
+      const tag = document.createElement('span');
+      tag.className = 'selected-tag';
+      tag.innerHTML = `<span>${prodName}</span><button type="button" aria-label="Quitar ${prodName}">✕</button>`;
+      tag.querySelector('button').addEventListener('click', () => {
+        selectedProducts.delete(prodName);
+        document
+          .querySelectorAll(`[data-select-product="${prodName}"]`)
+          .forEach((btn) => {
+            btn.classList.remove('added');
+            btn.textContent = 'Incluir en cotización +';
+          });
+        renderSelectedProducts();
+      });
+      selectedList.appendChild(tag);
+    });
+  }
+
+  document.querySelectorAll('[data-select-product]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const prod = btn.getAttribute('data-select-product');
+      if (selectedProducts.has(prod)) {
+        selectedProducts.delete(prod);
+        btn.classList.remove('added');
+        btn.textContent = 'Incluir en cotización +';
+      } else {
+        selectedProducts.add(prod);
+        btn.classList.add('added');
+        btn.textContent = '✓ Incluido en cotización';
+      }
+      renderSelectedProducts();
+
+      // También sincronizar con la descripción del formulario de contacto si está vacía o agregando líneas
+      if (contactDescription && selectedProducts.size > 0) {
+        const itemsText = Array.from(selectedProducts).join(', ');
+        if (!contactDescription.value.includes('Partidas de interés:')) {
+          contactDescription.value = `Partidas de interés: ${itemsText}.\n` + contactDescription.value;
+        } else {
+          contactDescription.value = contactDescription.value.replace(
+            /Partidas de interés:.*\n?/,
+            `Partidas de interés: ${itemsText}.\n`
+          );
+        }
+      }
+    });
+  });
+
+  // 5. Botones de prellenado para Cambio de Dirección Horizontal / Vertical (Sección 5)
+  document.querySelectorAll('[data-prefill-direction]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const dir = btn.getAttribute('data-prefill-direction');
+      const contactDirSelect = document.getElementById('contactDirection');
+      const specHorizontalInput = document.getElementById('specHorizontalAngle');
+      const specVerticalInput = document.getElementById('specVerticalChange');
+
+      if (dir === 'horizontal') {
+        if (contactDirSelect) contactDirSelect.value = 'Horizontal';
+        if (specHorizontalInput && !specHorizontalInput.value) {
+          specHorizontalInput.value = 'Requerimiento de estructuras de ángulo, aisladores de tensión y herrajes de anclaje';
+          specHorizontalInput.focus();
+        }
+      } else if (dir === 'vertical') {
+        if (contactDirSelect) contactDirSelect.value = 'Vertical';
+        if (specVerticalInput && !specVerticalInput.value) {
+          specVerticalInput.value = 'Requerimiento para desnivel vertical, grapas especiales, contrapesos y control de carga vertical';
+          specVerticalInput.focus();
+        }
+      }
+    });
+  });
+
+  // 6. Modal de Especificaciones por Nivel de Tensión (13.8 kV, 34.5 kV, 115 kV, 230 kV)
+  const specModal = document.getElementById('voltageSpecModal');
+  const modalTitle = document.getElementById('modalVoltageTitle');
+  const modalCategory = document.getElementById('modalVoltageCategory');
+  const modalBody = document.getElementById('modalVoltageBody');
+  const closeSpecModalBtn = document.getElementById('closeSpecModalBtn');
+  const modalCancelBtn = document.getElementById('modalCancelBtn');
+  const modalQuoteBtn = document.getElementById('modalQuoteThisVoltageBtn');
+  let activeModalVoltage = '115 kV';
+
+  function openVoltageModal(voltageKey) {
+    const data = VOLTAGE_SPECIFICATIONS[voltageKey];
+    if (!data || !specModal) return;
+    activeModalVoltage = voltageKey;
+    modalTitle.textContent = data.title;
+    modalCategory.textContent = data.category;
+    modalBody.innerHTML = `
+      <p style="color: #e2e8f0; font-size: 0.96rem; margin-bottom: 1rem;">${data.summary}</p>
+      <div class="spec-modal-grid">
+        <div class="spec-modal-box">
+          <h4>Conductores y Cable de Guarda</h4>
+          <ul>${data.conductors.map((item) => `<li>• ${item}</li>`).join('')}</ul>
+        </div>
+        <div class="spec-modal-box">
+          <h4>Estructuras, Postes y Torres</h4>
+          <ul>${data.structures.map((item) => `<li>• ${item}</li>`).join('')}</ul>
+        </div>
+        <div class="spec-modal-box">
+          <h4>Aisladores y Herrajes (Tangente y Ángulo H/V)</h4>
+          <ul>${data.insulationAndHardware.map((item) => `<li>• ${item}</li>`).join('')}</ul>
+        </div>
+        <div class="spec-modal-box">
+          <h4>Protecciones, Tierras y Accesorios</h4>
+          <ul>${data.protection.map((item) => `<li>• ${item}</li>`).join('')}</ul>
+        </div>
+      </div>
+    `;
+    specModal.hidden = false;
+  }
+
+  function closeVoltageModal() {
+    if (specModal) specModal.hidden = true;
+  }
+
+  document.querySelectorAll('[data-open-spec]').forEach((btn) => {
+    btn.addEventListener('click', (e) => {
+      e.preventDefault();
+      const kv = btn.getAttribute('data-open-spec');
+      openVoltageModal(kv);
+    });
+  });
+
+  if (closeSpecModalBtn) closeSpecModalBtn.addEventListener('click', closeVoltageModal);
+  if (modalCancelBtn) modalCancelBtn.addEventListener('click', closeVoltageModal);
+  if (modalQuoteBtn) {
+    modalQuoteBtn.addEventListener('click', () => {
+      const specVoltage = document.getElementById('specVoltage');
+      const contactVoltage = document.getElementById('contactVoltage');
+      if (specVoltage) specVoltage.value = activeModalVoltage;
+      if (contactVoltage) contactVoltage.value = activeModalVoltage;
+      closeVoltageModal();
+      const target = document.getElementById('cotizacion');
+      if (target) target.scrollIntoView({ behavior: 'smooth' });
+    });
+  }
+
+  // Cerrar modales al hacer clic fuera del cuadro de diálogo
+  window.addEventListener('click', (e) => {
+    if (e.target === specModal) closeVoltageModal();
+    if (e.target === brandConfigModal) brandConfigModal.hidden = true;
+  });
+
+  // 7. Gestión visual de archivos adjuntos (Dropzones en Sección 6 y Sección 10)
+  function setupFileDropzone(inputId, dropzoneId, listId) {
+    const fileInput = document.getElementById(inputId);
+    const dropzone = document.getElementById(dropzoneId);
+    const fileList = document.getElementById(listId);
+    if (!fileInput || !dropzone || !fileList) return;
+
+    function updateFilesDisplay(files) {
+      fileList.innerHTML = '';
+      Array.from(files).forEach((f) => {
+        const li = document.createElement('li');
+        const sizeKb = Math.max(1, Math.round(f.size / 1024));
+        li.textContent = `📎 ${f.name} (${sizeKb} KB)`;
+        fileList.appendChild(li);
+      });
+    }
+
+    fileInput.addEventListener('change', () => {
+      updateFilesDisplay(fileInput.files);
+    });
+
+    dropzone.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      dropzone.classList.add('dragover');
+    });
+
+    dropzone.addEventListener('dragleave', () => {
+      dropzone.classList.remove('dragover');
+    });
+
+    dropzone.addEventListener('drop', (e) => {
+      e.preventDefault();
+      dropzone.classList.remove('dragover');
+      if (e.dataTransfer && e.dataTransfer.files.length > 0) {
+        fileInput.files = e.dataTransfer.files;
+        updateFilesDisplay(e.dataTransfer.files);
+      }
+    });
+  }
+
+  setupFileDropzone('specFiles', 'specDropzone', 'specFileList');
+  setupFileDropzone('contactFiles', 'contactDropzone', 'contactFileList');
+
+  // 8. Envío funcional del Formulario de Especificaciones Técnicas (Sección 6)
+  const technicalSpecForm = document.getElementById('technicalSpecForm');
+  const specFormFeedback = document.getElementById('specFormFeedback');
+
+  if (technicalSpecForm && specFormFeedback) {
+    technicalSpecForm.addEventListener('submit', (e) => {
+      e.preventDefault();
+      const voltage = document.getElementById('specVoltage').value.trim();
+      const length = document.getElementById('specLength').value.trim();
+      const terrain = document.getElementById('specTerrain').value.trim();
+      const structures = document.getElementById('specStructuresCount').value.trim();
+      const hAngle = document.getElementById('specHorizontalAngle').value.trim() || 'Por definir en plano';
+      const vChange = document.getElementById('specVerticalChange').value.trim() || 'Por definir en perfil';
+      const conductor = document.getElementById('specConductor').value.trim();
+      const delivery = document.getElementById('specDeliveryDate').value || 'Inmediata / A convenir';
+      const name = document.getElementById('specContactName').value.trim();
+      const contact = document.getElementById('specContactInfo').value.trim();
+      const filesInput = document.getElementById('specFiles');
+      const attachedCount = filesInput && filesInput.files ? filesInput.files.length : 0;
+
+      if (!voltage || !length || !terrain || !structures || !conductor || !name || !contact) {
+        specFormFeedback.hidden = false;
+        specFormFeedback.className = 'form-feedback error';
+        specFormFeedback.textContent =
+          'Por favor complete los campos técnicos obligatorios (*) para generar su solicitud de cotización.';
+        return;
+      }
+
+      const brand = getSavedBrandConfig();
+      const catalogList =
+        selectedProducts.size > 0 ? Array.from(selectedProducts).join(', ') : 'Suministro general por proyecto';
+
+      const waMessage = encodeURIComponent(
+        `*SOLICITUD TÉCNICA DE COTIZACIÓN — ${brand.name}*\n` +
+          `• *Responsable:* ${name} (${contact})\n` +
+          `• *Nivel de tensión:* ${voltage}\n` +
+          `• *Longitud aprox.:* ${length}\n` +
+          `• *Terreno:* ${terrain}\n` +
+          `• *Cant. estructuras:* ${structures}\n` +
+          `• *Ángulo horizontal:* ${hAngle}\n` +
+          `• *Desnivel vertical:* ${vChange}\n` +
+          `• *Conductor:* ${conductor}\n` +
+          `• *Entrega estimada:* ${delivery}\n` +
+          `• *Partidas:* ${catalogList}\n` +
+          `• *Archivos adjuntos:* ${attachedCount} archivo(s)`
+      );
+
+      specFormFeedback.hidden = false;
+      specFormFeedback.className = 'form-feedback success';
+      specFormFeedback.innerHTML = `
+        <div>✓ <strong>Especificaciones registradas correctamente.</strong> Folio técnico generado para <strong>${voltage}</strong> (${length}).</div>
+        <div style="margin-top: 0.6rem; display: flex; gap: 0.6rem; flex-wrap: wrap;">
+          <a href="https://wa.me/${brand.whatsapp}?text=${waMessage}" target="_blank" rel="noopener noreferrer" class="btn btn-whatsapp btn-sm">
+            Enviar resumen directo por WhatsApp →
+          </a>
+          <a href="mailto:${brand.email}?subject=${encodeURIComponent('Cotización Línea Eléctrica ' + voltage + ' - ' + name)}&body=${waMessage}" class="btn btn-electric btn-sm">
+            Abrir en Correo Electrónico ✉
+          </a>
+        </div>
+      `;
+    });
+  }
+
+  // 9. Envío funcional del Formulario de Contacto y Cotización (Sección 10)
+  const contactQuoteForm = document.getElementById('contactQuoteForm');
+  const contactFormFeedback = document.getElementById('contactFormFeedback');
+  const sendContactViaWhatsAppBtn = document.getElementById('sendContactViaWhatsAppBtn');
+
+  function buildContactSummary() {
+    const name = document.getElementById('contactName').value.trim();
+    const company = document.getElementById('contactCompany').value.trim();
+    const email = document.getElementById('contactEmail').value.trim();
+    const phone = document.getElementById('contactPhone').value.trim();
+    const voltage = document.getElementById('contactVoltage').value.trim();
+    const reqType = document.getElementById('contactReqType').value.trim();
+    const direction = document.getElementById('contactDirection').value.trim();
+    const desc = document.getElementById('contactDescription').value.trim();
+    const filesInput = document.getElementById('contactFiles');
+    const attachedCount = filesInput && filesInput.files ? filesInput.files.length : 0;
+
+    return {
+      valid: Boolean(name && company && email && phone && voltage && reqType && direction && desc),
+      name,
+      company,
+      email,
+      phone,
+      voltage,
+      reqType,
+      direction,
+      desc,
+      attachedCount
+    };
+  }
+
+  if (contactQuoteForm && contactFormFeedback) {
+    contactQuoteForm.addEventListener('submit', (e) => {
+      e.preventDefault();
+      const data = buildContactSummary();
+      if (!data.valid) {
+        contactFormFeedback.hidden = false;
+        contactFormFeedback.className = 'form-feedback error';
+        contactFormFeedback.textContent =
+          'Por favor complete todos los campos obligatorios (*) para procesar su solicitud de cotización.';
+        return;
+      }
+
+      const brand = getSavedBrandConfig();
+      const waText = encodeURIComponent(
+        `*COTIZACIÓN DE LÍNEA ELÉCTRICA (${data.voltage})*\n` +
+          `• *Nombre:* ${data.name}\n` +
+          `• *Empresa:* ${data.company}\n` +
+          `• *Correo:* ${data.email}\n` +
+          `• *Teléfono/WhatsApp:* ${data.phone}\n` +
+          `• *Nivel de tensión:* ${data.voltage}\n` +
+          `• *Tipo de requerimiento:* ${data.reqType}\n` +
+          `• *Cambio de dirección:* ${data.direction}\n` +
+          `• *Descripción:* ${data.desc}\n` +
+          `• *Archivos seleccionados:* ${data.attachedCount}`
+      );
+
+      contactFormFeedback.hidden = false;
+      contactFormFeedback.className = 'form-feedback success';
+      contactFormFeedback.innerHTML = `
+        <div>✓ <strong>¡Solicitud lista para atención prioritaria!</strong> Hemos preparado la orden de cotización de <strong>${data.company}</strong> para línea de <strong>${data.voltage}</strong> (${data.reqType} · Cambio de dirección: ${data.direction}).</div>
+        <div style="margin-top: 0.65rem; display: flex; gap: 0.6rem; flex-wrap: wrap;">
+          <a href="https://wa.me/${brand.whatsapp}?text=${waText}" target="_blank" rel="noopener noreferrer" class="btn btn-whatsapp btn-sm">
+            Confirmar envío por WhatsApp →
+          </a>
+          <a href="mailto:${brand.email}?subject=${encodeURIComponent('Solicitud de Cotización ' + data.voltage + ' - ' + data.company)}&body=${waText}" class="btn btn-electric btn-sm">
+            Enviar por Correo Electrónico ✉
+          </a>
+        </div>
+      `;
+    });
+  }
+
+  if (sendContactViaWhatsAppBtn) {
+    sendContactViaWhatsAppBtn.addEventListener('click', () => {
+      const data = buildContactSummary();
+      if (!data.valid) {
+        contactFormFeedback.hidden = false;
+        contactFormFeedback.className = 'form-feedback error';
+        contactFormFeedback.textContent =
+          'Complete primero los datos del formulario para enviar el resumen estructurado por WhatsApp.';
+        return;
+      }
+      const brand = getSavedBrandConfig();
+      const waText = encodeURIComponent(
+        `*COTIZACIÓN DE LÍNEA ELÉCTRICA (${data.voltage})*\n` +
+          `• *Nombre:* ${data.name}\n` +
+          `• *Empresa:* ${data.company}\n` +
+          `• *Correo:* ${data.email}\n` +
+          `• *Teléfono:* ${data.phone}\n` +
+          `• *Tensión:* ${data.voltage} | *Requerimiento:* ${data.reqType}\n` +
+          `• *Cambio de dirección:* ${data.direction}\n` +
+          `• *Proyecto:* ${data.desc}`
+      );
+      window.open(`https://wa.me/${brand.whatsapp}?text=${waText}`, '_blank', 'noopener,noreferrer');
+    });
+  }
+
+  // 10. Personalizador en vivo de Datos de Empresa (Nombre, Teléfono, WhatsApp, Correo, Dirección)
+  const openBrandConfigBtn = document.getElementById('openBrandConfigBtn');
+  const brandConfigModal = document.getElementById('brandConfigModal');
+  const closeBrandModalBtn = document.getElementById('closeBrandModalBtn');
+  const brandConfigForm = document.getElementById('brandConfigForm');
+  const resetBrandConfigBtn = document.getElementById('resetBrandConfigBtn');
+
+  function getSavedBrandConfig() {
+    try {
+      const raw = localStorage.getItem('use_panama_brand_config_v2');
+      if (raw) return { ...DEFAULT_BRAND_CONFIG, ...JSON.parse(raw) };
+    } catch (_) {
+      // Fallback
+    }
+    return { ...DEFAULT_BRAND_CONFIG };
+  }
+
+  function applyBrandConfig(cfg) {
+    document.querySelectorAll('[data-brand-name]').forEach((el) => {
+      el.textContent = cfg.name;
+    });
+    document.querySelectorAll('[data-brand-contact]').forEach((el) => {
+      el.textContent = cfg.contact || DEFAULT_BRAND_CONFIG.contact;
+    });
+    document.querySelectorAll('[data-brand-phone]').forEach((el) => {
+      el.textContent = cfg.phone;
+    });
+    document.querySelectorAll('[data-brand-phone-link]').forEach((el) => {
+      const cleanTel = cfg.phone.replace(/[^\d+]/g, '');
+      el.setAttribute('href', `tel:${cleanTel}`);
+    });
+    document.querySelectorAll('[data-brand-email]').forEach((el) => {
+      el.textContent = cfg.email;
+    });
+    document.querySelectorAll('[data-brand-email-link]').forEach((el) => {
+      el.setAttribute('href', `mailto:${cfg.email}`);
+    });
+    document.querySelectorAll('[data-brand-address]').forEach((el) => {
+      el.textContent = cfg.address;
+    });
+    document.querySelectorAll('[data-brand-wa-link]').forEach((el) => {
+      const cleanWa = cfg.whatsapp.replace(/\D/g, '');
+      const contactPerson = cfg.contact || DEFAULT_BRAND_CONFIG.contact;
+      const msg = encodeURIComponent(
+        `Hola ${contactPerson} (${cfg.name}), solicito una cotización de materiales para líneas eléctricas.`
+      );
+      el.setAttribute('href', `https://wa.me/${cleanWa}?text=${msg}`);
+    });
+    document.title = `${cfg.name} | Proveedor de Materiales para Líneas Eléctricas 13.8 kV, 34.5 kV, 115 kV y 230 kV`;
+  }
+
+  // Cargar configuración guardada al iniciar
+  const currentBrand = getSavedBrandConfig();
+  applyBrandConfig(currentBrand);
+
+  if (openBrandConfigBtn && brandConfigModal) {
+    openBrandConfigBtn.addEventListener('click', () => {
+      const cfg = getSavedBrandConfig();
+      document.getElementById('cfgBrandName').value = cfg.name;
+      const contactInput = document.getElementById('cfgBrandContact');
+      if (contactInput) contactInput.value = cfg.contact || DEFAULT_BRAND_CONFIG.contact;
+      document.getElementById('cfgBrandPhone').value = cfg.phone;
+      document.getElementById('cfgBrandWhatsapp').value = cfg.whatsapp;
+      document.getElementById('cfgBrandEmail').value = cfg.email;
+      document.getElementById('cfgBrandAddress').value = cfg.address;
+      brandConfigModal.hidden = false;
+    });
+  }
+
+  if (closeBrandModalBtn && brandConfigModal) {
+    closeBrandModalBtn.addEventListener('click', () => {
+      brandConfigModal.hidden = true;
+    });
+  }
+
+  if (brandConfigForm) {
+    brandConfigForm.addEventListener('submit', (e) => {
+      e.preventDefault();
+      const contactInput = document.getElementById('cfgBrandContact');
+      const newCfg = {
+        name: document.getElementById('cfgBrandName').value.trim() || DEFAULT_BRAND_CONFIG.name,
+        contact:
+          (contactInput && contactInput.value.trim()) || DEFAULT_BRAND_CONFIG.contact,
+        phone: document.getElementById('cfgBrandPhone').value.trim() || DEFAULT_BRAND_CONFIG.phone,
+        whatsapp: document.getElementById('cfgBrandWhatsapp').value.trim() || DEFAULT_BRAND_CONFIG.whatsapp,
+        email: document.getElementById('cfgBrandEmail').value.trim() || DEFAULT_BRAND_CONFIG.email,
+        address: document.getElementById('cfgBrandAddress').value.trim() || DEFAULT_BRAND_CONFIG.address
+      };
+      try {
+        localStorage.setItem('use_panama_brand_config_v2', JSON.stringify(newCfg));
+      } catch (_) {}
+      applyBrandConfig(newCfg);
+      brandConfigModal.hidden = true;
+    });
+  }
+
+  if (resetBrandConfigBtn) {
+    resetBrandConfigBtn.addEventListener('click', () => {
+      try {
+        localStorage.removeItem('use_panama_brand_config_v2');
+      } catch (_) {}
+      applyBrandConfig(DEFAULT_BRAND_CONFIG);
+      brandConfigModal.hidden = true;
+    });
+  }
+});
