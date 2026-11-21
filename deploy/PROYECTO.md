@@ -3,6 +3,8 @@
 Documento de referencia del proyecto. Vive en `deploy/`, que Nginx **bloquea** al público
 (no se sirve en la web). No contiene claves ni contraseñas.
 
+**Regla de trabajo:** cada cambio en el sitio, el admin, la base de datos, Nginx o el material de Facebook se registra en este documento en el mismo commit (secciones 3–9 y bitácora al final).
+
 - Sitio público: https://energia.useservices.company
 - Administración: https://energia.useservices.company/admin
 - Repositorio: `usettt19-eng/Lineas-Electricas` (rama de trabajo `claude/charming-fermi-5n6s4m`)
@@ -114,3 +116,7 @@ usuario de página, actualizar el enlace del pie y `sameAs` en `index.html`.
 4. Search Console: solicitar indexación.
 5. Facebook: subir perfil/portada, publicar, completar “Información”.
 6. Decidir si se crea un pull request (no se ha creado ninguno).
+
+## 10. Bitácora de cambios
+
+- 2026-11-21 — Conectada la página de Facebook (enlace del pie y `sameAs`); portada reorganizada (texto solo en la franja superior); creado este documento y `deploy/facebook/`.
