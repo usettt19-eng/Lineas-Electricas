@@ -792,7 +792,7 @@ document.addEventListener('DOMContentLoaded', () => {
     document.querySelectorAll('.whatsapp-float').forEach((el) => {
       el.setAttribute('aria-label', `Contactar por WhatsApp con ${cfg.contact || DEFAULT_BRAND_CONFIG.contact} (${waDisplay})`);
     });
-    document.title = `${cfg.name} | Proveedor de Materiales para Líneas Eléctricas 13.8 kV, 34.5 kV, 115 kV y 230 kV`;
+    document.title = `${cfg.name} | Materiales para Líneas Eléctricas, Transformadores y Alumbrado Público`;
   }
 
   // Valores por defecto al instante (o la última versión guardada en caché) y luego los datos vigentes de Supabase
