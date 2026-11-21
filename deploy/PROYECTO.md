@@ -101,6 +101,36 @@ No publicar precios, costos, datos de clientes/proveedores ni conductores.
 Pendiente: completar “Información” de la página (web, WhatsApp, correo) y, si se crea un nombre de
 usuario de página, actualizar el enlace del pie y `sameAs` en `index.html`.
 
+## 7b. Instagram
+
+- **Cuenta:** profesional → tipo **Empresa**. Categoría: *Empresa de equipos eléctricos* (o *Proveedor de suministros industriales*).
+- **Nombre (buscable):** `USE Energía | Líneas eléctricas Panamá`
+- **Usuario (corto, sin guiones bajos):** `use.energia` · alternativas `useenergia.pa`, `use.division.energia`
+- **Bio (≤150 caracteres):**
+  ```
+  ⚡ Líneas eléctricas 13.8–230 kV
+  🔌 Transformadores · 💡 Alumbrado público
+  📍 Panamá · Exportamos a Latinoamérica
+  👇 Cotiza tu lista
+  ```
+- **Enlaces (hasta 5):** web `https://energia.useservices.company`, WhatsApp `https://wa.me/50769759851`, Facebook.
+- **Botones de contacto:** correo y WhatsApp; dirección de la oficina en Bella Vista (opcional).
+- **Foto de perfil:** el logo “USE División Energía” (circular, se ve bien en miniatura).
+- **Historias destacadas** (portadas con el mismo estilo azul/naranja): Transformadores · Alumbrado · Cotizar · Proyectos · Embalaje y envíos.
+- **Enlazar con Facebook** (Centro de cuentas) para publicar en ambos a la vez.
+- **Plan de contenido:** 3 Reels/semana + 1 carrusel + historias diarias.
+  - Reels (7–20 s): “¿Qué diferencia hay entre 13.8 y 34.5 kV?”, “Partes de una estructura de ángulo”,
+    “Cómo se embala un transformador”, “Poste, pedestal o subestación: cuál elegir”, “Qué datos necesitas para cotizar”,
+    “Luminaria LED: qué mirar en la ficha técnica”, carga/embalaje de pedidos (sin datos de clientes).
+  - Carruseles: checklist de lista de materiales, glosario de herrajes, guía de alumbrado público.
+  - Historias: encuestas (“¿Qué tensión maneja tu proyecto?”), caja de preguntas, bastidores.
+  - Primeros 2 segundos con el gancho en pantalla; subtítulos siempre; cierre “Cotiza tu lista → link en bio”.
+- **Hashtags (5–8 por publicación, mezclar):** #LíneasEléctricas #MediaTensión #AltaTensión #Transformadores #AlumbradoPúblico #IngenieríaEléctrica #Panamá #MaterialesEléctricos #Subestaciones #Electricistas
+- **Horario sugerido (Panamá):** martes a jueves, 7–9 a. m. o 6–8 p. m.
+- **Expectativa realista:** el alcance masivo no está garantizado; en un nicho B2B “viral” significa llegar a ingenieros, contratistas y compradores. Lo que más ayuda: Reels educativos, constancia, responder comentarios y mensajes en menos de 1 hora, y colaborar con contratistas/ingenieros.
+- **No publicar:** precios, costos, clientes ni proveedores; conductores/cables siguen “próximamente”.
+- **Pendiente:** pasar la URL de la cuenta para conectar el ícono de Instagram del pie (`data-brand-instagram`) y agregarla a `sameAs`.
+
 ## 8. Operación
 
 - Actualizar el servidor: `git pull origin <rama>` en la carpeta del sitio.
@@ -120,3 +150,4 @@ usuario de página, actualizar el enlace del pie y `sameAs` en `index.html`.
 ## 10. Bitácora de cambios
 
 - 2026-11-21 — Conectada la página de Facebook (enlace del pie y `sameAs`); portada reorganizada (texto solo en la franja superior); creado este documento y `deploy/facebook/`.
+- 2026-11-21 — Agregada la sección 7b (Instagram: perfil, bio, plan de contenido).
