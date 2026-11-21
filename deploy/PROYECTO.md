@@ -117,7 +117,7 @@ usuario de página, actualizar el enlace del pie y `sameAs` en `index.html`.
 - **Enlaces (hasta 5):** web `https://energia.useservices.company`, WhatsApp `https://wa.me/50769759851`, Facebook.
 - **Botones de contacto:** correo y WhatsApp; dirección de la oficina en Bella Vista (opcional).
 - **Foto de perfil:** el logo “USE División Energía” (circular, se ve bien en miniatura).
-- **Historias destacadas** (portadas con el mismo estilo azul/naranja): Transformadores · Alumbrado · Cotizar · Proyectos · Embalaje y envíos.
+- **Historias destacadas:** Transformadores · Alumbrado · Cotizar · Proyectos · Embalaje y envíos. Portadas 1080×1920 (solo ícono) en `deploy/facebook/destacadas/`; generador `deploy/facebook/mk_destacadas.py`.
 - **Enlazar con Facebook** (Centro de cuentas) para publicar en ambos a la vez.
 - **Plan de contenido:** 3 Reels/semana + 1 carrusel + historias diarias.
   - Reels (7–20 s): “¿Qué diferencia hay entre 13.8 y 34.5 kV?”, “Partes de una estructura de ángulo”,
@@ -154,3 +154,4 @@ usuario de página, actualizar el enlace del pie y `sameAs` en `index.html`.
 - 2026-11-21 — Conectada la página de Facebook (enlace del pie y `sameAs`); portada reorganizada (texto solo en la franja superior); creado este documento y `deploy/facebook/`.
 - 2026-11-21 — Agregada la sección 7b (Instagram: perfil, bio, plan de contenido).
 - 2026-11-21 — Conectado Instagram (`energia_use`): ícono del pie y `sameAs` en `index.html`.
+- 2026-11-21 — Creadas 5 portadas de historias destacadas de Instagram (`deploy/facebook/destacadas/`).
