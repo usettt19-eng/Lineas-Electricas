@@ -9,6 +9,7 @@ Documento de referencia del proyecto. Vive en `deploy/`, que Nginx **bloquea** a
 - Administración: https://energia.useservices.company/admin
 - Repositorio: `usettt19-eng/Lineas-Electricas` (rama de trabajo `claude/charming-fermi-5n6s4m`)
 - Facebook: https://www.facebook.com/profile.php?id=61596929634193
+- Instagram: https://www.instagram.com/energia_use/
 - WhatsApp: +507 6975 9851 (`https://wa.me/50769759851`)
 
 ## 1. Negocio
@@ -105,7 +106,7 @@ usuario de página, actualizar el enlace del pie y `sameAs` en `index.html`.
 
 - **Cuenta:** profesional → tipo **Empresa**. Categoría: *Empresa de equipos eléctricos* (o *Proveedor de suministros industriales*).
 - **Nombre (buscable):** `USE Energía | Líneas eléctricas Panamá`
-- **Usuario (corto, sin guiones bajos):** `use.energia` · alternativas `useenergia.pa`, `use.division.energia`
+- **Usuario (ya creado):** `energia_use`
 - **Bio (≤150 caracteres):**
   ```
   ⚡ Líneas eléctricas 13.8–230 kV
@@ -129,7 +130,8 @@ usuario de página, actualizar el enlace del pie y `sameAs` en `index.html`.
 - **Horario sugerido (Panamá):** martes a jueves, 7–9 a. m. o 6–8 p. m.
 - **Expectativa realista:** el alcance masivo no está garantizado; en un nicho B2B “viral” significa llegar a ingenieros, contratistas y compradores. Lo que más ayuda: Reels educativos, constancia, responder comentarios y mensajes en menos de 1 hora, y colaborar con contratistas/ingenieros.
 - **No publicar:** precios, costos, clientes ni proveedores; conductores/cables siguen “próximamente”.
-- **Pendiente:** pasar la URL de la cuenta para conectar el ícono de Instagram del pie (`data-brand-instagram`) y agregarla a `sameAs`.
+- **Conectado:** ícono de Instagram del pie y `sameAs` apuntan a `https://www.instagram.com/energia_use/`.
+- **Nota:** en la web de Instagram no se pueden editar los enlaces; se agregan desde la app móvil (Editar perfil → Enlaces).
 
 ## 8. Operación
 
@@ -151,3 +153,4 @@ usuario de página, actualizar el enlace del pie y `sameAs` en `index.html`.
 
 - 2026-11-21 — Conectada la página de Facebook (enlace del pie y `sameAs`); portada reorganizada (texto solo en la franja superior); creado este documento y `deploy/facebook/`.
 - 2026-11-21 — Agregada la sección 7b (Instagram: perfil, bio, plan de contenido).
+- 2026-11-21 — Conectado Instagram (`energia_use`): ícono del pie y `sameAs` en `index.html`.
